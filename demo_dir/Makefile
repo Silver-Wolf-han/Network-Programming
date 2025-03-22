@@ -2,7 +2,7 @@ CC	= gcc
 CXX	= g++
 CFLAGS	= -Wall -g
 
-PROGS	= shell npshell
+PROGS	= npshell
 
 all: $(PROGS)
 
