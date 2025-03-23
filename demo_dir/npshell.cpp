@@ -12,12 +12,14 @@
 using namespace std;
 
 int main() {
+    setenv("PATH", "bin:.", 1);
+
     int status;
 
     while (true) {
-        Info myInfo = {false, 0, {{}, {}}};
+        Info myInfo = {false, {}, {}, {}};
 
-        typePrompt();
+        typePrompt(false);
 
         if (readCommand(myInfo) < 0) {
             continue;
@@ -38,7 +40,7 @@ int main() {
                 executeCommand(myInfo);
             } else {
                 if (myInfo.bg) {
-                    cout << "[JID] " << pid << std::endl;
+                    cout << "[JID] " << pid << endl;
                 } else {
                     waitpid(pid, &status, 0);
                 }
@@ -49,20 +51,23 @@ int main() {
     return 0;
 }
 
-void typePrompt() {
+
+void typePrompt(bool showPath) {
     struct passwd *pw;
     char hostname[MAX_SIZE], cwd[MAX_SIZE];
 
     pw = getpwuid(getuid());
     gethostname(hostname, MAX_SIZE);
     getcwd(cwd, MAX_SIZE);
-
-    cout << pw->pw_name << "@" << hostname << ":~" << cwd << "$ ";
+    if (showPath) {
+        cout << pw->pw_name << "@" << hostname << ":~" << cwd << "$ ";
+     } else {
+        cout << "% ";
+     }
 }
 
 int readCommand(Info &info) {
-    bool firstPrgm = true;
-    vector<string> tempArgv[2];
+    vector<vector<string>> tempArgv;
     string command;
 
     if (!getline(cin, command)) {
@@ -71,116 +76,110 @@ int readCommand(Info &info) {
 
     istringstream iss(command);
     string token;
+    int command_size = 0;
+    
+    tempArgv.push_back({});
     
     while (iss >> token) {
         if (token == "&") {
             info.bg = true;
         } else if (token == ">") {
-            info.op = OUT_RD;
-            firstPrgm = false;
-        } else if (token == "<") {
-            info.op = IN_RD;
-            firstPrgm = false;
+            info.op.push_back(OUT_RD);
+            info.numberpip.push_back(NOT_NUMBER_PIPE);
+            command_size++;
+            tempArgv.push_back({});
         } else if (token == "|") {
-            info.op = PIPE;
-            firstPrgm = false;
-        } else if (firstPrgm) {
-            tempArgv[0].push_back(token);
+            info.op.push_back(PIPE);
+            info.numberpip.push_back(NOT_NUMBER_PIPE);
+            command_size++;
+            tempArgv.push_back({});
+        } else if (token[0] == '|') {
+            info.op.push_back(PIPE);
+            info.numberpip.push_back(stoi(token.substr(1, token.size() - 1)));
+            command_size++;
+            tempArgv.push_back({});
         } else {
-            tempArgv[1].push_back(token);
+            tempArgv[command_size].push_back(token);
+        }
+    }
+    
+    info.op.push_back(0);
+    
+    if (tempArgv[0].empty()) {
+        return -1;
+    }
+    
+    for (size_t i = 0; i < info.op.size(); ++i) {
+        if (info.op[i] && tempArgv[i+1].empty()) {
+            cerr << "Error: Syntax error near unexpected token 'newline'\n";
+            return -1;
         }
     }
 
-    if (tempArgv[0].empty() && info.op == 0 && tempArgv[1].empty()) {
-        return -1;
-    }
-
-    if (info.op && tempArgv[1].empty()) {
-        cerr << "Error: Syntax error near unexpected token 'newline'\n";
-        return -1;
-    }
-
-    info.argv[0] = tempArgv[0];
-    info.argv[1] = tempArgv[1];
-
+    info.argv = tempArgv;
     return 0;
 }
 
 void executeCommand(Info info) {
-    if (info.op == PIPE) {
-        int fd[2];
-
-        if (pipe(fd) < 0) {
-            cerr << "Error: Unable to create pipe\n";
-            exit(1);
-        }
-
-        pid_t pid = fork();
-        if (pid < 0) {
-            cerr << "Error: Unable to fork\n";
-            exit(1);
-        } else if (pid == 0) {
-            close(fd[0]);
-            dup2(fd[1], STDOUT_FILENO);
-            close(fd[1]);
-
-            vector<char*> args;
-            for (auto &arg : info.argv[0]) {
-                args.push_back(arg.data());
-            }
-            args.push_back(nullptr);
-
-            if (execvp(args[0], args.data()) == -1) {
-                cerr << "Error: \"" << args[0] << "\" command not found\n";
+    for (size_t i = 0; i < info.argv.size(); ++i) {
+        if (info.op[i] == PIPE) {
+            int fd[2];
+    
+            if (pipe(fd) < 0) {
+                cerr << "Error: Unable to create pipe\n";
                 exit(1);
+            }
+    
+            pid_t pid = fork();
+            if (pid < 0) {
+                cerr << "Error: Unable to fork\n";
+                exit(1);
+            } else if (pid == 0) {
+                close(fd[0]);
+                dup2(fd[1], STDOUT_FILENO);
+                close(fd[1]);
+    
+                vector<char*> args;
+                for (auto &arg : info.argv[i]) {
+                    args.push_back(arg.data());
+                }
+                args.push_back(nullptr);
+    
+                if (execvp(args[0], args.data()) == -1) {
+                    cerr << "Unknown command: [" << args[0] << "]\n";
+                    exit(1);
+                }
+            } else {
+                int status;
+                waitpid(pid, &status, 0);
+                close(fd[1]);
+                dup2(fd[0], STDIN_FILENO);
+                close(fd[0]);
             }
         } else {
-            int status;
-            waitpid(pid, &status, 0);
-            close(fd[1]);
-            dup2(fd[0], STDIN_FILENO);
-            close(fd[0]);
-
+            int fd;
+            if (info.op[i] == OUT_RD) {
+                fd = open(info.argv[i+1][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+                if (fd < 0) {
+                    cerr << "Error: " << info.argv[i+1][0] << ": Failed to open or create file\n";
+                    exit(1);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+    
             vector<char*> args;
-            for (auto &arg : info.argv[1]) {
+            for (auto &arg : info.argv[i]) {
                 args.push_back(arg.data());
             }
             args.push_back(nullptr);
-
+    
             if (execvp(args[0], args.data()) == -1) {
-                cerr << "Error: \"" << args[0] << "\" command not found\n";
+                cerr << "Unknown command: [" << args[0] << "]\n";
                 exit(1);
             }
-        }
-    } else {
-        int fd;
-        if (info.op == IN_RD) {
-            fd = open(info.argv[1][0].c_str(), O_RDONLY);
-            if (fd < 0) {
-                cerr << "Error: " << info.argv[1][0] << ": No such file or directory\n";
-                exit(1);
-            }
-            dup2(fd, STDIN_FILENO);
-            close(fd);
-        } else if (info.op == OUT_RD) {
-            fd = open(info.argv[1][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
-            if (fd < 0) {
-                cerr << "Error: " << info.argv[1][0] << ": Failed to open or create file\n";
-                exit(1);
-            }
-            dup2(fd, STDOUT_FILENO);
-            close(fd);
-        }
-
-        vector<char*> args;
-        for (auto &arg : info.argv[0]) {
-            args.push_back(arg.data());
-        }
-        args.push_back(nullptr);
-
-        if (execvp(args[0], args.data()) == -1) {
-            cerr << "Error: \"" << args[0] << "\" command not found\n";
-            exit(1);
+            break;
         }
     }
+
 }

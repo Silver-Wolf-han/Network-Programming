@@ -9,17 +9,22 @@
 #include <pwd.h>        // getpwuid()
 
 constexpr int MAX_SIZE = 500;
+
 constexpr int PIPE = 1;
-constexpr int IN_RD = 2;
-constexpr int OUT_RD = 3;
+constexpr int OUT_RD = 2;
+
+constexpr int NOT_NUMBER_PIPE = 0;
+
+using namespace std;
 
 struct Info {
     bool bg;  // Execute in the background
-    int op;   // 0: single process, 1: two-process pipeline, 2: input redirection, 3: output redirection
-    std::vector<std::string> argv[2]; // Arguments for first and second operand
+    //int op;   // 0: single process, 1: two-process pipeline, 2: output redirection
+    vector<int> op; // 0: single process, 1: pipline, 2: output redirection
+    vector<int> numberpip; // 0: Not number pipe, int: number pip int
+    vector<vector<string>> argv; // Arguments for first and second operand
 };
 
-
-void typePrompt();
+void typePrompt(bool showPath);
 int readCommand(Info &info);
 void executeCommand(Info info);
