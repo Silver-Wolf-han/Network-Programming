@@ -17,12 +17,16 @@ constexpr int NOT_NUMBER_PIPE = 0;
 
 using namespace std;
 
+struct pipeStruct {
+    int pipeStage;  // numpipe handle, -1: not used, int: num pipe
+    int fd[2];      // pipe
+};
+
 struct Info {
-    bool bg;  // Execute in the background
-    //int op;   // 0: single process, 1: two-process pipeline, 2: output redirection
-    vector<int> op; // 0: single process, 1: pipline, 2: output redirection
-    vector<int> numberpip; // 0: Not number pipe, int: number pip int
-    vector<vector<string>> argv; // Arguments for first and second operand
+    bool bg;                        // Execute in the background
+    vector<int> op;                 // 0: single process, 1: pipline, 2: output redirection
+    vector<int> numberpip;          // 0: Not number pipe, int: number pip int
+    vector<vector<string>> argv;    // Arguments for first and second operand
 };
 
 void typePrompt(bool showPath);
