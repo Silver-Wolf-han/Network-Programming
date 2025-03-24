@@ -26,5 +26,6 @@ struct Info {
 };
 
 void typePrompt(bool showPath);
+int builtInCommand(Info info);
 int readCommand(Info &info);
 void executeCommand(Info info);

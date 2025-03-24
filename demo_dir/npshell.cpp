@@ -24,14 +24,12 @@ int main() {
         if (readCommand(myInfo) < 0) {
             continue;
         }
+        
+        int builtInFlag = builtInCommand(myInfo);
 
-        if (!myInfo.argv[0].empty() && myInfo.argv[0][0] == "exit") {
+        if (builtInFlag == -1) {
             break;
-        } else if (!myInfo.argv[0].empty() && myInfo.argv[0][0] == "cd") {
-            if (chdir(myInfo.argv[0][1].c_str()) < 0) {
-                cerr << "Error: cd: " << myInfo.argv[0][1] << ": No such file or directory\n";
-            }
-        } else {
+        } else if (!builtInFlag) {
             pid_t pid = fork();
             if (pid < 0) {
                 cerr << "Error: Unable to fork\n";
@@ -61,9 +59,53 @@ void typePrompt(bool showPath) {
     getcwd(cwd, MAX_SIZE);
     if (showPath) {
         cout << pw->pw_name << "@" << hostname << ":~" << cwd << "$ ";
-     } else {
+    } else {
         cout << "% ";
-     }
+    }
+}
+
+// return value: (1) 1, built-in function, continue read next command, (2) -1, exit or ^C (3) 0, not built-in
+int builtInCommand(Info info) {
+
+    // empty line or not single command
+    if (info.argv[0].empty() || info.argv.size() != 1) {
+        return 0;
+    }
+
+    // exit
+    if (info.argv[0][0] == "exit") {
+        return -1;
+    }
+
+    // setenv
+    if (info.argv[0][0] == "setenv") {
+        if (info.argv[0].size() == 3) {
+            setenv(info.argv[0][1].c_str(), info.argv[0][2].c_str(), 1);
+        } else {
+            cerr << "command [setenv] lost parameter [var] or [value]" << endl;
+        }
+        return 1;
+    }
+
+    // printenv
+    if (info.argv[0][0] == "printenv") {
+        if (info.argv[0].size() == 2) {
+            if (const char* env_p = getenv(info.argv[0][1].c_str())) {
+                cout << env_p << endl;
+            }
+        }
+        return 1;
+    }
+
+    // cd
+    if (info.argv[0][0] == "cd") {
+        if (chdir(info.argv[0][1].c_str()) < 0) {
+            cerr << "Error: cd: " << info.argv[0][1] << ": No such file or directory\n";
+        }
+        return 1;
+    }
+
+    return 0;
 }
 
 int readCommand(Info &info) {
