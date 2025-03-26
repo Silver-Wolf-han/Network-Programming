@@ -16,16 +16,25 @@ int main() {
 
     int status;
 
+    int totalCommandCount = 0;
+
     while (true) {
         Info myInfo = {false, {}, {}, {}};
 
         typePrompt(false);
 
-        if (readCommand(myInfo) < 0) {
+        int commandNum = readCommand(myInfo, totalCommandCount);
+        if (commandNum < 0) {
             continue;
         }
         
+        
         int builtInFlag = builtInCommand(myInfo);
+
+        int currentCommandStart = totalCommandCount;
+        totalCommandCount += commandNum + builtInFlag;
+
+        cout << "currentCommandStart:" << currentCommandStart << " totalCommandCount:" << totalCommandCount << endl;
 
         if (builtInFlag == -1) {
             break;
@@ -108,7 +117,7 @@ int builtInCommand(Info info) {
     return 0;
 }
 
-int readCommand(Info &info) {
+int readCommand(Info &info, const int totalCommandCount) {
     vector<vector<string>> tempArgv;
     string command;
 
@@ -127,18 +136,18 @@ int readCommand(Info &info) {
             info.bg = true;
         } else if (token == ">") {
             info.op.push_back(OUT_RD);
-            info.numberpip.push_back(NOT_NUMBER_PIPE);
             command_size++;
+            info.numberpip.push_back(totalCommandCount + command_size + NOT_NUMBER_PIPE);
             tempArgv.push_back({});
         } else if (token == "|") {
             info.op.push_back(PIPE);
-            info.numberpip.push_back(NOT_NUMBER_PIPE);
             command_size++;
+            info.numberpip.push_back(totalCommandCount + command_size + NOT_NUMBER_PIPE);
             tempArgv.push_back({});
         } else if (token[0] == '|') {
             info.op.push_back(PIPE);
-            info.numberpip.push_back(stoi(token.substr(1, token.size() - 1)));
             command_size++;
+            info.numberpip.push_back(totalCommandCount + command_size + stoi(token.substr(1, token.size() - 1)));
             tempArgv.push_back({});
         } else {
             tempArgv[command_size].push_back(token);
@@ -159,7 +168,8 @@ int readCommand(Info &info) {
     }
 
     info.argv = tempArgv;
-    return 0;
+    //cout << "diff?" << info.argv.size() << " " << info.op.size() << " " << info.numberpip.size() << endl;
+    return (int)info.argv.size();
 }
 
 void executeCommand(Info info) {

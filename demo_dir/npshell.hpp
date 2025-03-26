@@ -13,12 +13,12 @@ constexpr int MAX_SIZE = 500;
 constexpr int PIPE = 1;
 constexpr int OUT_RD = 2;
 
-constexpr int NOT_NUMBER_PIPE = 0;
+constexpr int NOT_NUMBER_PIPE = 1;
 
 using namespace std;
 
 struct pipeStruct {
-    int pipeStage;  // numpipe handle, -1: not used, int: num pipe
+    int pipeStage;  // which command going to pipe
     int fd[2];      // pipe
 };
 
@@ -32,5 +32,5 @@ struct Info {
 
 void typePrompt(bool showPath);
 int builtInCommand(Info info);
-int readCommand(Info &info);
+int readCommand(Info &info, const int totalCommandCount);
 void executeCommand(Info info);
