@@ -39,6 +39,9 @@ int main() {
         if (builtInFlag == -1) {
             break;
         } else if (!builtInFlag) {
+            for (size_t i = 0; i < myInfo.opOrder.size(); ++i) {
+                cout << "In exec, info.op[i]:" << myInfo.op[i] << " info.opOrder[i]:" << myInfo.opOrder[i] << endl;
+            }
             pid_t pid = fork();
             if (pid < 0) {
                 cerr << "Error: Unable to fork\n";
@@ -134,27 +137,17 @@ int readCommand(Info &info, const int totalCommandCount) {
     while (iss >> token) {
         if (token == "&") {
             info.bg = true;
-        } else if (token == ">") {
-            info.op.push_back(OUT_RD);
+        } else if (token == ">" || token[0] == '|') {
+            info.op.push_back((token == ">" ? OUT_RD:PIPE));
+            info.opOrder.push_back((token == ">" ? NOT_PIPE : totalCommandCount + command_size + (token.size() == 1 ? NOT_NUMBER_PIPE:stoi(token.substr(1, token.size() - 1)))));
             command_size++;
-            info.numberpip.push_back(totalCommandCount + command_size + NOT_NUMBER_PIPE);
-            tempArgv.push_back({});
-        } else if (token == "|") {
-            info.op.push_back(PIPE);
-            command_size++;
-            info.numberpip.push_back(totalCommandCount + command_size + NOT_NUMBER_PIPE);
-            tempArgv.push_back({});
-        } else if (token[0] == '|') {
-            info.op.push_back(PIPE);
-            command_size++;
-            info.numberpip.push_back(totalCommandCount + command_size + stoi(token.substr(1, token.size() - 1)));
             tempArgv.push_back({});
         } else {
             tempArgv[command_size].push_back(token);
         }
     }
     
-    info.op.push_back(0);
+    info.op.push_back(END_OF_COMMAND);
     
     if (tempArgv[0].empty()) {
         return -1;
@@ -168,8 +161,8 @@ int readCommand(Info &info, const int totalCommandCount) {
     }
 
     info.argv = tempArgv;
-    //cout << "diff?" << info.argv.size() << " " << info.op.size() << " " << info.numberpip.size() << endl;
-    return (int)info.argv.size();
+    
+    return (int)info.argv.size() - (info.op.size() > 1 && info.op[info.op.size()-2] == OUT_RD  ? 1:0);
 }
 
 void executeCommand(Info info) {
