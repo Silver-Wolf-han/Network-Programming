@@ -16,8 +16,6 @@ int main() {
 
     int status;
 
-    vector<pipeStruct> pipeList;
-
     while (true) {
         Info myInfo = {false, {}, {}, {}};
 
@@ -37,7 +35,7 @@ int main() {
                 cerr << "Error: Unable to fork\n";
                 exit(1);
             } else if (pid == 0) {
-                executeCommand(myInfo, pipeList);
+                executeCommand(myInfo);
             } else {
                 if (myInfo.bg) {
                     cout << "[JID] " << pid << endl;
@@ -154,7 +152,7 @@ int readCommand(Info &info) {
     }
     
     for (size_t i = 0; i < info.op.size(); ++i) {
-        if (info.op[i] == 1 && tempArgv[i+1].empty()) {
+        if (info.op[i] && tempArgv[i+1].empty()) {
             cerr << "Error: Syntax error near unexpected token 'newline'\n";
             return -1;
         }
@@ -164,43 +162,25 @@ int readCommand(Info &info) {
     return 0;
 }
 
-void executeCommand(Info info, vector<pipeStruct> &pipeList) {
+void executeCommand(Info info) {
     for (size_t i = 0; i < info.argv.size(); ++i) {
         if (info.op[i] == PIPE) {
-
-            //struct pipeStruct pipeInfo;
-            //pipeList.push_back({-1, {}});
-
-            //int fd[2];
-            
-            /*
+            int fd[2];
+    
             if (pipe(fd) < 0) {
                 cerr << "Error: Unable to create pipe\n";
                 exit(1);
             }
-            */
-            struct pipeStruct pipeInfo = { info.numberpip[i],{}};
-            if (pipe(pipeInfo.fd) < 0) {
-                cerr << "Error: Unable to create pipe" << endl;
-                exit(1);
-            }
-            pipeList.push_back(pipeInfo);
     
             pid_t pid = fork();
             if (pid < 0) {
                 cerr << "Error: Unable to fork\n";
                 exit(1);
             } else if (pid == 0) {
-
-                //cout << "pid:" << pid << "start dup" << endl;
-                close(pipeList[pipeList.size() - 1].fd[0]);
-                dup2(pipeList[pipeList.size() - 1].fd[1], STDOUT_FILENO);
-                close(pipeList[pipeList.size() - 1].fd[1]);
-                //cout << "pid:" << pid << "end dup" << endl;
-
-                
-
-                //cout << "pid:" << pid << "start exec" << endl;
+                close(fd[0]);
+                dup2(fd[1], STDOUT_FILENO);
+                close(fd[1]);
+    
                 vector<char*> args;
                 for (auto &arg : info.argv[i]) {
                     args.push_back(arg.data());
@@ -211,32 +191,12 @@ void executeCommand(Info info, vector<pipeStruct> &pipeList) {
                     cerr << "Unknown command: [" << args[0] << "]\n";
                     exit(1);
                 }
-                //cout << "pid:" << pid << "end exec" << endl;
             } else {
                 int status;
                 waitpid(pid, &status, 0);
-                //cout << "pid:" << pid << "start pipe count" << endl;
-                for (size_t i = 0; i < pipeList.size(); ++i) {
-                    //cout << "pid:" << pid << "i:" << i << "pipeList[i].pipeStage" << pipeList[i].pipeStage << endl;
-                    if(pipeList[i].pipeStage > 0) {
-                        --pipeList[i].pipeStage;
-                    }
-                }
-                //cout << "pid:" << pid << "start pipe handle" << endl;
-                for (size_t i = 0; i < pipeList.size(); ++i) {
-                    //cout << "pid:" << pid << "i:" << i << "pipeList[i].pipeStage" << pipeList[i].pipeStage << endl;
-                    if (pipeList[i].pipeStage == 0) {
-                        close(pipeList[i].fd[1]);
-                        dup2(pipeList[i].fd[0], STDIN_FILENO);
-                        close(pipeList[i].fd[0]);
-                        --pipeList[i].pipeStage;
-                    }
-                }
-                /*
                 close(fd[1]);
                 dup2(fd[0], STDIN_FILENO);
                 close(fd[0]);
-                */
             }
         } else {
             int fd;

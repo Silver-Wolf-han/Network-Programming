@@ -27,9 +27,10 @@ struct Info {
     vector<int> op;                 // 0: single process, 1: pipline, 2: output redirection
     vector<int> numberpip;          // 0: Not number pipe, int: number pip int
     vector<vector<string>> argv;    // Arguments for first and second operand
+    vector<int> pipeIndexList;      // pipeIndex, -1 if not pipe
 };
 
 void typePrompt(bool showPath);
 int builtInCommand(Info info);
 int readCommand(Info &info);
-void executeCommand(Info info, vector<pipeStruct> &pipeList);
+void executeCommand(Info info);
