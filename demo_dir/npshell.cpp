@@ -7,16 +7,21 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <pwd.h>
+#include <signal.h>
 #include "npshell.hpp"
 
 using namespace std;
 
 int main() {
+    signal(SIGCHLD, sigchld_handler);
+
     setenv("PATH", "bin:.", 1);
 
-    int status;
+    //int status;
 
     int totalCommandCount = 0;
+
+    vector<struct pipeStruct> pipeList;
 
     while (true) {
         Info myInfo = {false, {}, {}, {}};
@@ -42,23 +47,43 @@ int main() {
             for (size_t i = 0; i < myInfo.opOrder.size(); ++i) {
                 cout << "In exec, info.op[i]:" << myInfo.op[i] << " info.opOrder[i]:" << myInfo.opOrder[i] << endl;
             }
+
+            for (size_t i = 0; i < myInfo.op.size(); ++i) {
+                if (myInfo.op[i] != OUT_RD) {
+                    pipeList.push_back({myInfo.opOrder[i], {}});
+                    if (myInfo.op[i] == PIPE) {
+                        if (pipe(pipeList[pipeList.size()-1].fd) < 0) {
+                            cerr << "Error: Unable to create pipe\n";
+                            exit(1);
+                        }
+                    }
+                }
+            }
+            /*
             pid_t pid = fork();
             if (pid < 0) {
                 cerr << "Error: Unable to fork\n";
                 exit(1);
             } else if (pid == 0) {
-                executeCommand(myInfo);
+                executeCommand(myInfo, pipeList, currentCommandStart);
             } else {
                 if (myInfo.bg) {
                     cout << "[JID] " << pid << endl;
                 } else {
-                    waitpid(pid, &status, 0);
+                    waitpid(pid, &status, WUNTRACED);
                 }
             }
+            */
+            executeCommand(myInfo, pipeList, currentCommandStart, totalCommandCount);
         }
     }
 
     return 0;
+}
+
+
+void sigchld_handler(int signo) {
+    while(waitpid(-1, NULL, WNOHANG) > 0);
 }
 
 
@@ -147,7 +172,6 @@ int readCommand(Info &info, const int totalCommandCount) {
         }
     }
     
-    info.op.push_back(END_OF_COMMAND);
     
     if (tempArgv[0].empty()) {
         return -1;
@@ -155,76 +179,80 @@ int readCommand(Info &info, const int totalCommandCount) {
     
     for (size_t i = 0; i < info.op.size(); ++i) {
         if (info.op[i] && tempArgv[i+1].empty()) {
-            cerr << "Error: Syntax error near unexpected token 'newline'\n";
-            return -1;
+            //cerr << "Error: Syntax error near unexpected token 'newline'\n";
+            //return -1;
+            tempArgv.erase(tempArgv.begin() + i + 1);
+            break;
         }
     }
-
-    info.argv = tempArgv;
     
+    info.argv = tempArgv;
+
+    if (info.argv.size() != info.op.size()) {
+        info.op.push_back(END_OF_COMMAND);
+        info.opOrder.push_back(NOT_PIPE);
+    }
+    cout << "In read, info.argv.size():" << info.argv.size() << " info.op.size():" << info.op.size() << endl;
     return (int)info.argv.size() - (info.op.size() > 1 && info.op[info.op.size()-2] == OUT_RD  ? 1:0);
 }
 
-void executeCommand(Info info) {
-    for (size_t i = 0; i < info.argv.size(); ++i) {
-        if (info.op[i] == PIPE) {
-            int fd[2];
-    
-            if (pipe(fd) < 0) {
-                cerr << "Error: Unable to create pipe\n";
-                exit(1);
-            }
-    
-            pid_t pid = fork();
-            if (pid < 0) {
-                cerr << "Error: Unable to fork\n";
-                exit(1);
-            } else if (pid == 0) {
-                close(fd[0]);
-                dup2(fd[1], STDOUT_FILENO);
-                close(fd[1]);
-    
-                vector<char*> args;
-                for (auto &arg : info.argv[i]) {
-                    args.push_back(arg.data());
+void executeCommand(Info info, vector<struct pipeStruct> pipeList, const int currentCommandStart, const int totalCommandCount) {
+    int status;
+    for (size_t i = (size_t)currentCommandStart; i < (size_t)totalCommandCount; ++i) {
+        pid_t pid = fork();
+        if (pid < 0) {
+            cerr << "Error: Unable to fork" << endl;
+        } else if (pid == 0) {
+            
+            size_t argvIndex = i - (size_t)currentCommandStart;
+
+            for (size_t j = 0; j < i; ++j) {
+                if (pipeList[j].OutCommandIndex == (int)i) {
+                    dup2(pipeList[j].fd[0], STDIN_FILENO);
                 }
-                args.push_back(nullptr);
-    
-                if (execvp(args[0], args.data()) == -1) {
-                    cerr << "Unknown command: [" << args[0] << "]\n";
-                    exit(1);
-                }
-            } else {
-                int status;
-                waitpid(pid, &status, 0);
-                close(fd[1]);
-                dup2(fd[0], STDIN_FILENO);
-                close(fd[0]);
             }
-        } else {
-            int fd;
-            if (info.op[i] == OUT_RD) {
-                fd = open(info.argv[i+1][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            
+            if (info.op[argvIndex] == OUT_RD) {
+                int fd;
+                fd = open(info.argv[argvIndex+1][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
                 if (fd < 0) {
-                    cerr << "Error: " << info.argv[i+1][0] << ": Failed to open or create file\n";
+                    cerr << "Error: " << info.argv[argvIndex+1][0] << ": Failed to open or create file\n";
                     exit(1);
                 }
                 dup2(fd, STDOUT_FILENO);
                 close(fd);
+            } else if (info.op[argvIndex] == PIPE) {
+                dup2(pipeList[i].fd[1], STDOUT_FILENO);
             }
-    
+
+            for (size_t j = 0; j <= i; ++j) {
+                if (pipeList[j].OutCommandIndex >= currentCommandStart && pipeList[j].OutCommandIndex <= (int)i && pipeList[j].OutCommandIndex != -1) {
+                    close(pipeList[j].fd[0]);
+                    close(pipeList[j].fd[1]);
+                }
+            }
+
             vector<char*> args;
-            for (auto &arg : info.argv[i]) {
+            for (auto &arg : info.argv[argvIndex]) {
                 args.push_back(arg.data());
             }
             args.push_back(nullptr);
-    
+
             if (execvp(args[0], args.data()) == -1) {
                 cerr << "Unknown command: [" << args[0] << "]\n";
                 exit(1);
             }
-            break;
+        } else {
+            for (size_t j = 0; j <= i; ++j) {
+                if (pipeList[j].OutCommandIndex >= currentCommandStart && pipeList[j].OutCommandIndex <= (int)i && pipeList[j].OutCommandIndex != -1) {
+                    close(pipeList[j].fd[0]);
+                    close(pipeList[j].fd[1]);
+                }
+            }
+            waitpid(pid, &status, 0);
         }
+        
     }
-
+    //waitpid(pid, &status, 0);
+    while (waitpid(-1, &status, WNOHANG) > 0);
 }
