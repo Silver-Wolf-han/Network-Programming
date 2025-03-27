@@ -37,9 +37,21 @@ int main() {
         int builtInFlag = builtInCommand(myInfo);
 
         int currentCommandStart = totalCommandCount;
-        totalCommandCount += commandNum + builtInFlag;
+        totalCommandCount += commandNum;
 
         cout << "currentCommandStart:" << currentCommandStart << " totalCommandCount:" << totalCommandCount << endl;
+
+        for (size_t i = 0; i < myInfo.op.size(); ++i) {
+            if (myInfo.op[i] != OUT_RD) {
+                pipeList.push_back({myInfo.opOrder[i], {}});
+                if (myInfo.op[i] == PIPE) {
+                    if (pipe(pipeList[pipeList.size()-1].fd) < 0) {
+                        cerr << "Error: Unable to create pipe\n";
+                        exit(1);
+                    }
+                }
+            }
+        }
 
         if (builtInFlag == -1) {
             break;
@@ -48,17 +60,7 @@ int main() {
                 cout << "In exec, info.op[i]:" << myInfo.op[i] << " info.opOrder[i]:" << myInfo.opOrder[i] << endl;
             }
 
-            for (size_t i = 0; i < myInfo.op.size(); ++i) {
-                if (myInfo.op[i] != OUT_RD) {
-                    pipeList.push_back({myInfo.opOrder[i], {}});
-                    if (myInfo.op[i] == PIPE) {
-                        if (pipe(pipeList[pipeList.size()-1].fd) < 0) {
-                            cerr << "Error: Unable to create pipe\n";
-                            exit(1);
-                        }
-                    }
-                }
-            }
+            
             /*
             pid_t pid = fork();
             if (pid < 0) {
@@ -208,7 +210,9 @@ void executeCommand(Info info, vector<struct pipeStruct> pipeList, const int cur
 
             for (size_t j = 0; j < i; ++j) {
                 if (pipeList[j].OutCommandIndex == (int)i) {
+                    close(pipeList[j].fd[1]);
                     dup2(pipeList[j].fd[0], STDIN_FILENO);
+                    //close(pipeList[j].fd[0]);
                 }
             }
             
@@ -222,16 +226,18 @@ void executeCommand(Info info, vector<struct pipeStruct> pipeList, const int cur
                 dup2(fd, STDOUT_FILENO);
                 close(fd);
             } else if (info.op[argvIndex] == PIPE) {
+                close(pipeList[i].fd[0]);
                 dup2(pipeList[i].fd[1], STDOUT_FILENO);
+                //close(pipeList[i].fd[1]);
             }
-
+            /*
             for (size_t j = 0; j <= i; ++j) {
                 if (pipeList[j].OutCommandIndex >= currentCommandStart && pipeList[j].OutCommandIndex <= (int)i && pipeList[j].OutCommandIndex != -1) {
                     close(pipeList[j].fd[0]);
                     close(pipeList[j].fd[1]);
                 }
             }
-
+            */
             vector<char*> args;
             for (auto &arg : info.argv[argvIndex]) {
                 args.push_back(arg.data());
@@ -243,12 +249,14 @@ void executeCommand(Info info, vector<struct pipeStruct> pipeList, const int cur
                 exit(1);
             }
         } else {
+            
             for (size_t j = 0; j <= i; ++j) {
                 if (pipeList[j].OutCommandIndex >= currentCommandStart && pipeList[j].OutCommandIndex <= (int)i && pipeList[j].OutCommandIndex != -1) {
                     close(pipeList[j].fd[0]);
                     close(pipeList[j].fd[1]);
                 }
             }
+            
             waitpid(pid, &status, 0);
         }
         
