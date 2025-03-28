@@ -13,7 +13,8 @@ constexpr int MAX_SIZE = 500;
 
 constexpr int END_OF_COMMAND = 0;   // op
 constexpr int PIPE = 1;
-constexpr int OUT_RD = 2;
+constexpr int PIPE_ERROR = 2;
+constexpr int OUT_RD = 3;
 
 constexpr int NOT_PIPE = -1;        // opOrder
 constexpr int NOT_NUMBER_PIPE = 1;
