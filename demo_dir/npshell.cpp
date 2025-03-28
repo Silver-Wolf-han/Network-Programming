@@ -201,20 +201,52 @@ int readCommand(Info &info, const int totalCommandCount) {
 void executeCommand(Info info, vector<struct pipeStruct> pipeList, const int currentCommandStart, const int totalCommandCount) {
     int status;
     for (size_t i = (size_t)currentCommandStart; i < (size_t)totalCommandCount; ++i) {
+        
+        int mergePipe[2];
+        if (pipe(mergePipe) < 0) {
+            cerr << "Error: Unable to create pipe\n";
+            exit(1);
+        }
+
         pid_t pid = fork();
         if (pid < 0) {
             cerr << "Error: Unable to fork" << endl;
         } else if (pid == 0) {
             
             size_t argvIndex = i - (size_t)currentCommandStart;
-
+            
+            bool input_from_pipe = false;
             for (size_t j = 0; j < i; ++j) {
+                if (pipeList[j].OutCommandIndex == (int)i) {
+                    input_from_pipe = true;
+                    close(pipeList[j].fd[1]); // Close write end
+
+                    char buffer[4096];
+                    ssize_t bytesRead;
+
+                    while ((bytesRead = read(pipeList[j].fd[0], buffer, sizeof(buffer))) > 0) {
+                        write(mergePipe[1], buffer, bytesRead);
+                    }
+                    close(pipeList[j].fd[0]);
+                }
+            }
+
+            close(mergePipe[1]);
+            if (input_from_pipe) {
+                dup2(mergePipe[0], STDIN_FILENO);
+            }
+            
+            close(mergePipe[0]);
+
+            /*
+            for (size_t j = 0; j < i; ++j)
                 if (pipeList[j].OutCommandIndex == (int)i) {
                     close(pipeList[j].fd[1]);
                     dup2(pipeList[j].fd[0], STDIN_FILENO);
-                    //close(pipeList[j].fd[0]);
+                    
                 }
             }
+            */
             
             if (info.op[argvIndex] == OUT_RD) {
                 int fd;
@@ -249,7 +281,9 @@ void executeCommand(Info info, vector<struct pipeStruct> pipeList, const int cur
                 exit(1);
             }
         } else {
+            close(mergePipe[0]);close(mergePipe[1]);
             
+
             for (size_t j = 0; j <= i; ++j) {
                 if (pipeList[j].OutCommandIndex >= currentCommandStart && pipeList[j].OutCommandIndex <= (int)i && pipeList[j].OutCommandIndex != -1) {
                     close(pipeList[j].fd[0]);
