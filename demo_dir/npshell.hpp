@@ -13,8 +13,9 @@ constexpr int MAX_SIZE = 500;
 
 constexpr int END_OF_COMMAND = 0;   // op
 constexpr int PIPE = 1;
-constexpr int PIPE_ERROR = 2;
-constexpr int OUT_RD = 3;
+constexpr int NUM_PIPE = 2;
+constexpr int NUM_PIPE_ERR = 3;
+constexpr int OUT_RD = 4;
 
 constexpr int NOT_PIPE = -1;        // opOrder
 constexpr int NOT_NUMBER_PIPE = 1;
@@ -31,7 +32,6 @@ struct Info {
     vector<int> op;                 // 0: single process, 1: pipline, 2: output redirection
     vector<int> opOrder;            // output to which command
     vector<vector<string>> argv;    // Arguments for first and second operand
-    vector<int> pipeIndexList;      // pipeIndex, -1 if not pipe
 };
 
 void sigchld_handler(int signo);

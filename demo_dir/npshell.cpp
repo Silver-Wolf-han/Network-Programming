@@ -40,7 +40,7 @@ int main() {
         for (size_t i = 0; i < myInfo.op.size(); ++i) {
             if (myInfo.op[i] != OUT_RD) {
                 pipeList.push_back({myInfo.opOrder[i], {}});
-                if (myInfo.op[i] == PIPE || myInfo.op[i] == PIPE_ERROR) {
+                if (myInfo.op[i] == PIPE || myInfo.op[i] == NUM_PIPE || myInfo.op[i] == NUM_PIPE_ERR) {
                     if (pipe(pipeList[pipeList.size()-1].fd) < 0) {
                         cerr << "Error: Unable to create pipe\n";
                         exit(1);
@@ -141,7 +141,14 @@ int readCommand(Info &info, const int totalCommandCount) {
         if (token == "&") {
             info.bg = true;
         } else if (token == ">" || token[0] == '|' || token[0] == '!') {
-            info.op.push_back((token == ">" ? OUT_RD: (token[0] == '|' ? PIPE:PIPE_ERROR)));
+            info.op.push_back(
+                (token == ">" ? OUT_RD: 
+                    (token == "|" ? PIPE:
+                        (token[0] == '|'? NUM_PIPE:
+                            NUM_PIPE_ERR)
+                    )
+                )
+            );
             info.opOrder.push_back(
                 (token == ">" ? NOT_PIPE : totalCommandCount + command_size + 
                     (token.size() == 1 ? NOT_NUMBER_PIPE:stoi(token.substr(1, token.size() - 1))))
@@ -150,6 +157,15 @@ int readCommand(Info &info, const int totalCommandCount) {
             tempArgv.push_back({});
         } else {
             tempArgv[command_size].push_back(token);
+        }
+        
+        // Fix number_pipe output pipe
+        if (token == "|") {
+            for (size_t i = 0; i < info.opOrder.size(); ++i) {
+                if (info.op[i] == NUM_PIPE && (int)i + info.opOrder[i] < totalCommandCount + command_size + 1) {
+                    info.opOrder[i]++;
+                }
+            }
         }
     }
     
@@ -225,9 +241,9 @@ void executeCommand(Info info, vector<struct pipeStruct> pipeList, const int cur
                 }
                 dup2(fd, STDOUT_FILENO);
                 close(fd);
-            } else if (info.op[argvIndex] == PIPE || info.op[argvIndex] == PIPE_ERROR) {
+            } else if (info.op[argvIndex] == PIPE || info.op[argvIndex] == NUM_PIPE || info.op[argvIndex] == NUM_PIPE_ERR) {
                 close(pipeList[i].fd[0]);
-                if (info.op[argvIndex] == PIPE_ERROR) {
+                if (info.op[argvIndex] == NUM_PIPE_ERR) {
                     dup2(pipeList[i].fd[1], STDERR_FILENO);
                 }
                 dup2(pipeList[i].fd[1], STDOUT_FILENO);
