@@ -2,7 +2,7 @@ CC	= gcc
 CXX	= g++
 CFLAGS	= -Wall -g
 
-PROGS	= noop number removetag removetag0
+PROGS	= noop number removetag removetag0 manyblessings
 
 all: $(PROGS)
 

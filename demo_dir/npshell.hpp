@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <vector>
+#include <map>
 #include <string>
 #include <sys/wait.h>   // waitpid()
 #include <fcntl.h>      // open()
@@ -23,8 +24,9 @@ constexpr int NOT_NUMBER_PIPE = 1;
 using namespace std;
 
 struct pipeStruct {
-    int OutCommandIndex;    // pipe output to which command
-    int fd[2];              // pipe
+    int OutCommandIndex;        // pipe output to which command
+    int fd[2];                  // pipe
+    vector<pid_t> relate_pids;  // input proc and previous proc
 };
 
 struct Info {
@@ -38,5 +40,5 @@ void sigchld_handler(int signo);
 void typePrompt(bool showPath);
 int builtInCommand(Info info);
 int readCommand(Info &info, const int totalCommandCount);
-void executeCommand(Info info, vector<struct pipeStruct> pipeList, const int currentCommandStart, const int totalCommandCount);
+void executeCommand(Info info, map<int, struct pipeStruct> pipeMap, const int currentCommandStart, const int totalCommandCount);
 //void executeCommand(Info info);

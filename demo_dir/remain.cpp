@@ -1,7 +1,6 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
-#include <map>
 #include <cstring>
 #include <unistd.h>
 #include <sys/types.h>
@@ -20,9 +19,7 @@ int main() {
 
     int totalCommandCount = 0;
 
-    // modify
-    // vector<struct pipeStruct> pipeList;
-    map<int, struct pipeStruct>  pipeMap;
+    vector<struct pipeStruct> pipeList;
 
     while (true) {
         Info myInfo = {false, {}, {}, {}};
@@ -40,8 +37,6 @@ int main() {
         int currentCommandStart = totalCommandCount;
         totalCommandCount += commandNum;
 
-        // modify
-        /*
         for (size_t i = 0; i < myInfo.op.size(); ++i) {
             if (myInfo.op[i] != OUT_RD) {
                 pipeList.push_back({myInfo.opOrder[i], {}, {}});
@@ -53,26 +48,11 @@ int main() {
                 }
             }
         }
-        */
-        for (size_t i = 0; i < myInfo.op.size(); ++i) {
-            if (myInfo.op[i] != OUT_RD) {
-                if ((myInfo.op[i] == PIPE || myInfo.op[i] == NUM_PIPE || myInfo.op[i] == NUM_PIPE_ERR) 
-                && pipeMap.find(myInfo.opOrder[i]) == pipeMap.end()) {
-                    pipeMap[myInfo.opOrder[i]] = {myInfo.opOrder[i], {}, {}};
-                    if (pipe(pipeMap[myInfo.opOrder[i]].fd) < 0) {
-                        cerr << "Error: Unable to create pipe" << endl;
-                        exit(1);
-                    }
-                }
-            }
-        }
-
 
         if (builtInFlag == -1) {
             break;
         } else if (!builtInFlag) {
-            // modify
-            executeCommand(myInfo, pipeMap, currentCommandStart, totalCommandCount);
+            executeCommand(myInfo, pipeList, currentCommandStart, totalCommandCount);
         }
     }
 
@@ -212,32 +192,55 @@ int readCommand(Info &info, const int totalCommandCount) {
     return (int)info.argv.size() - (info.op.size() > 1 && info.op[info.op.size()-2] == OUT_RD  ? 1:0);
 }
 
-void executeCommand(Info info, map<int, struct pipeStruct> pipeMap, const int currentCommandStart, const int totalCommandCount) {
+void executeCommand(Info info, vector<struct pipeStruct> pipeList, const int currentCommandStart, const int totalCommandCount) {
     int status;
 
+    //vector<pid_t> pids;
+
     for (size_t i = (size_t)currentCommandStart; i < (size_t)totalCommandCount; ++i) {
+        /*
+        int mergePipe[2];
+        if (pipe(mergePipe) < 0) {
+            cerr << "Error: Unable to create pipe\n";
+            exit(1);
+        }
+        */
 
         size_t argvIndex = i - (size_t)currentCommandStart;
         pid_t pid = fork();
         if (pid < 0) {
             cerr << "Error: Unable to fork" << endl;
         } else if (pid == 0) {
-            // modify a lot
-            /*
+            
+            
+            
+            // bool input_from_pipe = false;
             for (size_t j = 0; j < i; ++j) {
                 if (pipeList[j].OutCommandIndex == (int)i) {
+                    //input_from_pipe = true;
                     close(pipeList[j].fd[1]);
+                    
+                    /*
+                    char buffer[4096];
+                    ssize_t bytesRead;
+                    ssize_t totalByteRead = 0;
+                    while ((bytesRead = read(pipeList[j].fd[0], buffer, sizeof(buffer))) > 0) {
+                        totalByteRead += totalByteRead;
+                        write(mergePipe[1], buffer, bytesRead);
+                    }
+                    */
                     dup2(pipeList[j].fd[0], STDIN_FILENO);
+
                     close(pipeList[j].fd[0]);
                 }
             }
-            */
-            if (pipeMap.find((int)i) != pipeMap.end()) {
-                close(pipeMap[(int)i].fd[1]);
-                dup2(pipeMap[(int)i].fd[0], STDIN_FILENO);
-                close(pipeMap[(int)i].fd[0]);
+            /*
+            close(mergePipe[1]);
+            if (input_from_pipe) {
+                dup2(mergePipe[0], STDIN_FILENO);
             }
-            
+            close(mergePipe[0]);
+            */
             if (info.op[argvIndex] == OUT_RD) {
                 int fd;
                 fd = open(info.argv[argvIndex+1][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
@@ -248,20 +251,12 @@ void executeCommand(Info info, map<int, struct pipeStruct> pipeMap, const int cu
                 dup2(fd, STDOUT_FILENO);
                 close(fd);
             } else if (info.op[argvIndex] == PIPE || info.op[argvIndex] == NUM_PIPE || info.op[argvIndex] == NUM_PIPE_ERR) {
-                /*
                 close(pipeList[i].fd[0]);
                 if (info.op[argvIndex] == NUM_PIPE_ERR) {
                     dup2(pipeList[i].fd[1], STDERR_FILENO);
                 }
                 dup2(pipeList[i].fd[1], STDOUT_FILENO);
                 close(pipeList[i].fd[1]);
-                */
-                close(pipeMap[info.opOrder[argvIndex]].fd[0]);
-                if (info.op[argvIndex] == NUM_PIPE_ERR) {
-                    dup2(pipeMap[info.opOrder[argvIndex]].fd[1], STDERR_FILENO);
-                }
-                dup2(pipeMap[info.opOrder[argvIndex]].fd[1], STDOUT_FILENO);
-                close(pipeMap[info.opOrder[argvIndex]].fd[1]);
             }
             
             vector<char*> args;
@@ -275,12 +270,7 @@ void executeCommand(Info info, map<int, struct pipeStruct> pipeMap, const int cu
                 exit(1);
             }
         } else {
-
-            // modify a lot
-            if (pipeMap.find((int)i) != pipeMap.end()) {
-                pipeMap[(int)i].relate_pids.push_back(pid);
-            }
-            /*
+            // pids.push_back(pid);
             for (size_t j = 0; j < i; ++j) {
                 if (pipeList[j].OutCommandIndex == (int)i) {
                     for (size_t k = 0; k < pipeList[j].relate_pids.size(); ++k) {
@@ -289,36 +279,31 @@ void executeCommand(Info info, map<int, struct pipeStruct> pipeMap, const int cu
                 }
             }
             pipeList[i].relate_pids.push_back(pid);
-            */
 
-            if (pipeMap.find((int)i) != pipeMap.end()) {
-                close(pipeMap[(int)i].fd[0]);
-                close(pipeMap[(int)i].fd[1]);
-            }
-            /*
+            //close(mergePipe[0]);close(mergePipe[1]);
+            
+
             for (size_t j = 0; j <= i; ++j) {
                 if (pipeList[j].OutCommandIndex >= currentCommandStart && pipeList[j].OutCommandIndex <= (int)i && pipeList[j].OutCommandIndex != -1) {
                     close(pipeList[j].fd[0]);
                     close(pipeList[j].fd[1]);
                 }
             }
-            */
-            /*
+            
+            //waitpid(pid, &status, 0);
+
             if (info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD) {
                 for (pid_t pid_i: pipeList[i].relate_pids) {
                     waitpid(pid_i, &status, 0);
                 }
             }
-            */
-            if ((info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD) && pipeMap.find((int)i) != pipeMap.end()) {
-                for (pid_t pid_i: pipeMap[(int)i].relate_pids) {
-                    waitpid(pid_i, &status, 0);
-                }
-            } else if (info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD) {
-                waitpid(pid, &status, 0);
-            }
         }
         
     }
+    /*
+    for (pid_t pid: pids) {
+        waitpid(pid, &status, 0);
+    }
+    */
     while (waitpid(-1, &status, WNOHANG) > 0);
 }
