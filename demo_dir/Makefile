@@ -4,7 +4,7 @@ CFLAGS	= -Wall -g
 MAKE	= make
 DIRS	= bin/cmd
 
-PROGS	= npshell npshelltest
+PROGS	= npshell
 
 all: $(PROGS)
 	for d in $(DIRS); do $(MAKE) -C $$d || exit 1; done
@@ -24,7 +24,7 @@ all: $(PROGS)
 	$(CXX) -o $@ $(CFLAGS) $<
 
 clean:
-	for d in $(DIRS); do $(MAKE) -C $$d clean; done
 	rm -f *~ $(PROGS)
+	for d in $(DIRS); do $(MAKE) -C $$d clean; done
 	rm -f  ./bin/wc ./bin/ls ./bin/cat  ./bin/noop ./bin/number ./bin/removetag ./bin/removetag0 ./bin/manyblessings
 
