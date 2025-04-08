@@ -5,6 +5,8 @@
 #include <map>
 #include <string>
 #include <sys/wait.h>   // waitpid()
+#include <netinet/in.h> // **WAIT**
+#include <arpa/inet.h>  // **WAIT**
 #include <fcntl.h>      // open()
 #include <unistd.h>     // getcwd(), STDIN_FILENO, STDOUT_FILENO
 #include <pwd.h>        // getpwuid()
@@ -38,6 +40,9 @@ struct Info {
     vector<vector<string>> argv;    // Arguments for first and second operand
 };
 
+void concurentConnectionOrientedServer(int port);
+void npshellInit();
+void npshellLoop();
 void sigchld_handler(int signo);
 void typePrompt(bool showPath);
 int builtInCommand(Info info);

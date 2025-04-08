@@ -14,7 +14,6 @@ all: $(PROGS)
 run_test: $(PROGS)
 	mkdir working_directory
 	mkdir working_directory/bin
-	cd ..
 	for d in $(DIRS); do $(MAKE) -C $$d || exit 1; done
 	cp ./cmd/noop ./working_directory/bin/noop
 	cp ./cmd/number ./working_directory/bin/number
