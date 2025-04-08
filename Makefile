@@ -1,4 +1,3 @@
-CC	= gcc
 CXX	= g++
 CFLAGS	= -Wall -g
 MAKE	= make
@@ -6,12 +5,12 @@ DIRS	= cmd
 
 PROGS	= np_sample np_sample_proc
 
-all: $(PROGS)
+all:
+	$(CXX) -c npshell.cpp $(CFLAGS) -o npshell.o
+	$(CXX) np_sample.cpp npshell.o $(CFLAGS) -o np_sample
+	$(CXX) np_sample_proc.cpp $(CFLAGS) -o np_sample_proc
 
-%: %.cpp
-	$(CXX) -o $@ $(CFLAGS) $<
-
-run_test: $(PROGS)
+run_test: all
 	mkdir working_directory
 	mkdir working_directory/bin
 	for d in $(DIRS); do $(MAKE) -C $$d || exit 1; done
@@ -27,6 +26,7 @@ run_test: $(PROGS)
 
 clean:
 	rm -f *~ $(PROGS)
+	rm -f *.o
 	for d in $(DIRS); do $(MAKE) -C $$d clean; done
 	rm -rf working_directory
 
