@@ -6,6 +6,6 @@
 
 #include "npshell.hpp"
 
-#define BACKLOG 10
+#define MAX_CLIENT 30
 
 void concurentConnectionOrientedServer(int port);

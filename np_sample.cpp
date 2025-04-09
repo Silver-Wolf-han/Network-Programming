@@ -47,7 +47,7 @@ void concurentConnectionOrientedServer(int port) {
     }
 
     // listen
-    if (listen(server_fd, BACKLOG) == -1) {
+    if (listen(server_fd, MAX_CLIENT) == -1) {
         cerr << "listen error" << endl;
         exit(1);
     }

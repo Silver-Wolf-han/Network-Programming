@@ -8,7 +8,7 @@ PROGS	= np_sample np_sample_proc
 all:
 	$(CXX) -c npshell.cpp $(CFLAGS) -o npshell.o
 	$(CXX) np_sample.cpp npshell.o $(CFLAGS) -o np_sample
-	$(CXX) np_sample_proc.cpp $(CFLAGS) -o np_sample_proc
+	$(CXX) np_sample_proc.cpp npshell.o $(CFLAGS) -o np_sample_proc
 
 run_test: all
 	mkdir working_directory
