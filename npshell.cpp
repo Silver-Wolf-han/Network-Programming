@@ -79,6 +79,49 @@ void npshellLoop() {
     }
 }
 
+map<int, struct pipeStruct> npshell_handle_one_line(map<int, struct pipeStruct> pipeMap, bool *exit ,int *totalCommandCount) {
+    chdir("working_directory");
+    
+    Info myInfo = {false, {}, {}, {}};
+
+    typePrompt(false);
+
+    int commandNum = readCommand(myInfo, *totalCommandCount);
+    if (commandNum < 0) {
+        return pipeMap;
+    }
+    
+    
+    int builtInFlag = builtInCommand(myInfo);
+
+    int currentCommandStart = *totalCommandCount;
+    *totalCommandCount += commandNum;
+    
+    for (size_t i = 0; i < myInfo.op.size(); ++i) {
+        if (myInfo.op[i] == PIPE) {
+            map<int, struct pipeStruct> tempMap;
+            for (auto [key, value]:pipeMap) {
+                if (value.OutCommandIndex > currentCommandStart + (int)i) {
+                    value.OutCommandIndex++;
+                    tempMap[key+1] = value;
+                } else {
+                    tempMap[key] = value;
+                }
+            }
+            pipeMap = tempMap;
+        }
+        
+    }
+
+    if (builtInFlag == -1) {
+        *exit = true;
+    } else if (!builtInFlag) {
+        executeCommand(myInfo, pipeMap, currentCommandStart, *totalCommandCount);
+    }
+
+    return pipeMap;
+}
+
 
 void typePrompt(bool showPath) {
     struct passwd *pw;
@@ -134,6 +177,14 @@ int builtInCommand(Info info) {
         }
         return 1;
     }
+
+    // who
+
+    // tell
+
+    // yell
+
+    // name
 
     return 0;
 }

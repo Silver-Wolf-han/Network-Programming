@@ -40,6 +40,7 @@ struct Info {
 
 void npshellInit();
 void npshellLoop();
+map<int, struct pipeStruct> npshell_handle_one_line(map<int, struct pipeStruct> pipeMap, bool *exit ,int *totalCommandCount);
 void sigchld_handler(int signo);
 void typePrompt(bool showPath);
 int builtInCommand(Info info);

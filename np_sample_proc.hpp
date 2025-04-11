@@ -1,30 +1,25 @@
 #pragma once
 
-#include <iostream>
-#include <cstring>
-#include <string>
-#include <cstdlib>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <fcntl.h>
-
+#include <netinet/in.h> // **WAIT**
+#include <arpa/inet.h>  // **WAIT**
+#include <cstring>      // memset
 
 #include "npshell.hpp"
 
-#define MAX_CLIENT 30
+constexpr int MAX_CLIENT = 40;
 
-using namespace std;
+constexpr int FD_UNDEFINED = -1;
 
-struct User {
-    int id;
-    int socket;
-    string name;
-    string ip;
+struct UserInfo {
+    char IPAddress[INET_ADDRSTRLEN];
     int port;
+    string UserName;
+    map<string, string> EnvVar;
+    int totalCommandCount;
+    map<int, struct pipeStruct> pipeMap;
 };
 
-void broadcast(const string& msg);
-void send_to_user(int scok, const string& msg);
-
+void singleProcessConcurrentServer(int port);
+void welcomeMsg();
+void dup2Client(int fd);
+void broadcast(string msg);
