@@ -157,7 +157,7 @@ void singleProcessConcurrentServer(int port) {
                 continue;
             }
 
-            if (FD_ISSET(client_fd_table[i], &all_fd_set)) {
+            if (FD_ISSET(client_fd_table[i], &rset)) {
                 clearenv();
                 for(auto env : User_Info_Map[i].EnvVar){
                     setenv(env.first.c_str(), env.second.c_str(), 1);
