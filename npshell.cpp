@@ -324,10 +324,16 @@ int readCommand(Info &info, const int totalCommandCount) {
     
     tempArgv.push_back({});
     
+    bool is_tell_or_yell = false;
+
     while (iss >> token) {
+        if (command_size == 0 && (token == "yell" || token == "tell")) {
+            is_tell_or_yell = true;
+        }
+
         if (token == "&") {
             info.bg = true;
-        } else if (token == ">" || token[0] == '|' || token[0] == '!') {
+        } else if (!is_tell_or_yell && (token == ">" || token[0] == '|' || token[0] == '!')) {
             info.op.push_back(
                 (token == ">" ? OUT_RD: 
                     (token == "|" ? PIPE:
@@ -352,7 +358,7 @@ int readCommand(Info &info, const int totalCommandCount) {
         }
 
         // Fix number_pipe output
-        if (token == "|") {
+        if (!is_tell_or_yell && token == "|") {
             for (size_t i = 0; i < info.opOrder.size(); ++i) {
                 if (info.op[i] == NUM_PIPE && (int)i + info.opOrder[i] < totalCommandCount + command_size + 1) {
                     info.opOrder[i]++;
