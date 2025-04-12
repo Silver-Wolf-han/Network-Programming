@@ -38,9 +38,18 @@ struct Info {
     vector<vector<string>> argv;    // Arguments for first and second operand
 };
 
+struct UserInfo {
+    char IPAddress[INET_ADDRSTRLEN];
+    int port;
+    string UserName;
+    map<string, string> EnvVar;
+    int totalCommandCount;
+    map<int, struct pipeStruct> pipeMap;
+};
+
 void npshellInit();
 void npshellLoop();
-map<int, struct pipeStruct> npshell_handle_one_line(map<int, struct pipeStruct> pipeMap, bool *exit ,int *totalCommandCount);
+void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, bool *exit);
 void sigchld_handler(int signo);
 void typePrompt(bool showPath);
 int builtInCommand(Info info);

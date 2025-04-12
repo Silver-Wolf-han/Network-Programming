@@ -150,10 +150,7 @@ void singleProcessConcurrentServer(int port) {
             cout << "** Welcom to the information server. **" << endl;
             cout << "***************************************" << endl;
             string welmsg = "*** User '" + User_Info_Map[(int)push_idx].UserName + "' entered from " + User_Info_Map[(int)push_idx].IPAddress + ". ***";
-            for (auto user : User_Info_Map) {
-                dup2Client(client_fd_table[user.first]);
-                cout << welmsg << endl;
-            }
+            broadcast(welmsg);
             dup2Client(client_fd_table[(int)push_idx]);
             typePrompt(false);
 
@@ -189,11 +186,10 @@ void singleProcessConcurrentServer(int port) {
                 }
 
                 dup2Client(client_fd_table[i]);
-                
-                
 
                 bool exit = false;
-                User_Info_Map[i].pipeMap = npshell_handle_one_line(User_Info_Map[i].pipeMap, &exit, &User_Info_Map[i].totalCommandCount);
+                npshell_handle_one_line(User_Info_Map, i, &exit);
+
                 if (exit) {
                     dup2(4, STDIN_FILENO);
                     dup2(5, STDOUT_FILENO);
@@ -223,10 +219,12 @@ void dup2Client(int fd) {
     dup2(fd, STDERR_FILENO);
 }
 
-/* Not broadcast  thinking*/
 void broadcast(string msg) {
+
     for (auto user : User_Info_Map) {
-        dup2Client(client_fd_table[user.first]);
-        cout << msg << endl;
+        if (client_fd_table[user.first] != -1) {
+            dup2Client(client_fd_table[user.first]);
+            cout << msg << endl;
+        }
     }
 }

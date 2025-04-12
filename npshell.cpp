@@ -79,28 +79,26 @@ void npshellLoop() {
     }
 }
 
-map<int, struct pipeStruct> npshell_handle_one_line(map<int, struct pipeStruct> pipeMap, bool *exit ,int *totalCommandCount) {
+void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, bool *exit) {
+
     chdir("working_directory");
     
     Info myInfo = {false, {}, {}, {}};
 
-    
-
-    int commandNum = readCommand(myInfo, *totalCommandCount);
+    int commandNum = readCommand(myInfo, User_Info_Map[user_idx].totalCommandCount);
     if (commandNum < 0) {
-        return pipeMap;
+        return;
     }
-    
     
     int builtInFlag = builtInCommand(myInfo);
 
-    int currentCommandStart = *totalCommandCount;
-    *totalCommandCount += commandNum;
+    int currentCommandStart = User_Info_Map[user_idx].totalCommandCount;
+    User_Info_Map[user_idx].totalCommandCount += commandNum;
     
     for (size_t i = 0; i < myInfo.op.size(); ++i) {
         if (myInfo.op[i] == PIPE) {
             map<int, struct pipeStruct> tempMap;
-            for (auto [key, value]:pipeMap) {
+            for (auto [key, value]:User_Info_Map[user_idx].pipeMap) {
                 if (value.OutCommandIndex > currentCommandStart + (int)i) {
                     value.OutCommandIndex++;
                     tempMap[key+1] = value;
@@ -108,19 +106,26 @@ map<int, struct pipeStruct> npshell_handle_one_line(map<int, struct pipeStruct> 
                     tempMap[key] = value;
                 }
             }
-            pipeMap = tempMap;
+            User_Info_Map[user_idx].pipeMap = tempMap;
         }
         
     }
 
     if (builtInFlag == -1) {
         *exit = true;
+    } else if (builtInFlag == 1 && myInfo.argv[0][0] == "who") {
+
+    } else if (builtInFlag == 1 && myInfo.argv[0][0] == "tell") {
+
+    } else if (builtInFlag == 1 && myInfo.argv[0][0] == "yell") {
+
+    } else if (builtInFlag == 1 && myInfo.argv[0][0] == "name") {
+
     } else if (!builtInFlag) {
-        executeCommand(myInfo, pipeMap, currentCommandStart, *totalCommandCount);
+        executeCommand(myInfo, User_Info_Map[user_idx].pipeMap, currentCommandStart, User_Info_Map[user_idx].totalCommandCount);
         typePrompt(false);
     }
 
-    return pipeMap;
 }
 
 
@@ -181,12 +186,24 @@ int builtInCommand(Info info) {
     }
 
     // who
+    if (info.argv[0][0] == "who") {
+        return 1;
+    }
 
     // tell
+    if (info.argv[0][0] == "tell") {
+        return 1;
+    }
 
     // yell
+    if (info.argv[0][0] == "yell") {
+        return 1;
+    }
 
     // name
+    if (info.argv[0][0] == "name") {
+        return 1;
+    }
 
     return 0;
 }
