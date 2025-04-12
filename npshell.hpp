@@ -9,6 +9,7 @@
 #include <unistd.h>     // getcwd(), STDIN_FILENO, STDOUT_FILENO
 #include <pwd.h>        // getpwuid()
 #include <signal.h>     // signal()
+#include <string>
 
 constexpr int MAX_SIZE = 1000;
 
@@ -49,9 +50,12 @@ struct UserInfo {
 
 void npshellInit();
 void npshellLoop();
-void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, bool *exit);
+void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, bool *exit, const int* const client_fd_table);
+void dup2Client(int fd);
+void broadcast(string msg, const int* const client_fd_table, const map<int, UserInfo> User_Info_Map);
 void sigchld_handler(int signo);
 void typePrompt(bool showPath);
 int builtInCommand(Info info);
+int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, const int user_idx, const int* const client_fd_table);
 int readCommand(Info &info, const int totalCommandCount);
 void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart, const int totalCommandCount);

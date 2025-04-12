@@ -24,19 +24,19 @@ void singleProcessConcurrentServer(int port) {
 
     // create socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-        cerr << "server socket error\n";
+        cerr << "server socket error" << endl;
         exit(1);
     }
 
     // set socket opt: address user test
     int yes = 1;
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-        cerr << "set sockopt address error\n";
+        cerr << "set sockopt address error" << endl;
         exit(1);
     }
 
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(int)) == -1) {
-        cerr << "set sockopt port error\n";
+        cerr << "set sockopt port error" << endl;
         exit(1);
     }
 
@@ -48,13 +48,13 @@ void singleProcessConcurrentServer(int port) {
 
     // bind
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(struct sockaddr)) == -1) {
-        cerr << "bind error\n";
+        cerr << "bind error" << endl;
         exit(1);
     }
 
     // listen
     if (listen(server_fd, MAX_CLIENT) == -1) {
-        cerr << "listen error\n";
+        cerr << "listen error" << endl;
         exit(1);
     }
 
@@ -63,7 +63,7 @@ void singleProcessConcurrentServer(int port) {
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-        cerr << "sigaction error\n";
+        cerr << "sigaction error" << endl;
         exit(1);
     }
     signal(SIGCHLD, sigchld_handler);
@@ -95,7 +95,7 @@ void singleProcessConcurrentServer(int port) {
     dup2(STDOUT_FILENO, 5);
     dup2(STDERR_FILENO, 6);
 
-    cout << "Server is listening on port:" << port << "...\n";
+    cout << "Server is listening on port:" << port << "..." << endl;
 
     while (true) {
         rset = all_fd_set;
@@ -104,14 +104,14 @@ void singleProcessConcurrentServer(int port) {
         if ((select_reply_fd_count = select(max_fd_history+1, &rset, NULL, NULL, (struct timeval *)0)) == FD_UNDEFINED) {
             if (errno == EINTR)
                 continue;
-            cerr << "select error\n";
+            cerr << "select error" << endl;
             continue;
         }
         if (FD_ISSET(server_fd, &rset)) {
             // accept
             sin_size = sizeof(client_addr);
             if ((connect_fd = accept(server_fd, (struct sockaddr *)&client_addr, &sin_size)) == FD_UNDEFINED) {
-                cout << "accept error\n";
+                cout << "accept error" << endl;
                 continue;
             }
 
@@ -125,7 +125,7 @@ void singleProcessConcurrentServer(int port) {
                 }
             }
             if (push_idx == 0) {
-                cerr << "size of client too much\n";
+                cerr << "size of client too much" << endl;
                 exit(1);
             }
 
@@ -146,11 +146,13 @@ void singleProcessConcurrentServer(int port) {
             // Welcome Mesage
             
             dup2Client(client_fd_table[(int)push_idx]);
-            cout << "***************************************" << endl;
-            cout << "** Welcom to the information server. **" << endl;
-            cout << "***************************************" << endl;
-            string welmsg = "*** User '" + User_Info_Map[(int)push_idx].UserName + "' entered from " + User_Info_Map[(int)push_idx].IPAddress + ". ***";
-            broadcast(welmsg);
+            cout << "****************************************" << endl;
+            cout << "** Welcome to the information server. **" << endl;
+            cout << "****************************************" << endl;
+            string welmsg = "*** User '" + User_Info_Map[(int)push_idx].UserName + 
+                "' entered from " + User_Info_Map[(int)push_idx].IPAddress + 
+                ":" + to_string(User_Info_Map[(int)push_idx].port) + ". ***";
+            broadcast(welmsg, client_fd_table, User_Info_Map);
             dup2Client(client_fd_table[(int)push_idx]);
             typePrompt(false);
 
@@ -188,7 +190,7 @@ void singleProcessConcurrentServer(int port) {
                 dup2Client(client_fd_table[i]);
 
                 bool exit = false;
-                npshell_handle_one_line(User_Info_Map, i, &exit);
+                npshell_handle_one_line(User_Info_Map, i, &exit, client_fd_table);
 
                 if (exit) {
                     dup2(4, STDIN_FILENO);
@@ -198,7 +200,7 @@ void singleProcessConcurrentServer(int port) {
                     FD_CLR(client_fd_table[i], &all_fd_set);
                     client_fd_table[i] = -1;
                     string logout_msg = "*** User '" + User_Info_Map[i].UserName + "' left. ***";
-                    broadcast(logout_msg);
+                    broadcast(logout_msg, client_fd_table, User_Info_Map);
                     User_Info_Map.erase(i);
                 }
                 dup2(4, STDIN_FILENO);
@@ -209,22 +211,6 @@ void singleProcessConcurrentServer(int port) {
                 }
                 --select_reply_fd_count;
             }
-        }
-    }
-}
-
-void dup2Client(int fd) {
-    dup2(fd, STDIN_FILENO);
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
-}
-
-void broadcast(string msg) {
-
-    for (auto user : User_Info_Map) {
-        if (client_fd_table[user.first] != -1) {
-            dup2Client(client_fd_table[user.first]);
-            cout << msg << endl;
         }
     }
 }

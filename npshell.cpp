@@ -79,71 +79,6 @@ void npshellLoop() {
     }
 }
 
-void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, bool *exit) {
-
-    chdir("working_directory");
-    
-    Info myInfo = {false, {}, {}, {}};
-
-    int commandNum = readCommand(myInfo, User_Info_Map[user_idx].totalCommandCount);
-    if (commandNum < 0) {
-        return;
-    }
-    
-    int builtInFlag = builtInCommand(myInfo);
-
-    int currentCommandStart = User_Info_Map[user_idx].totalCommandCount;
-    User_Info_Map[user_idx].totalCommandCount += commandNum;
-    
-    for (size_t i = 0; i < myInfo.op.size(); ++i) {
-        if (myInfo.op[i] == PIPE) {
-            map<int, struct pipeStruct> tempMap;
-            for (auto [key, value]:User_Info_Map[user_idx].pipeMap) {
-                if (value.OutCommandIndex > currentCommandStart + (int)i) {
-                    value.OutCommandIndex++;
-                    tempMap[key+1] = value;
-                } else {
-                    tempMap[key] = value;
-                }
-            }
-            User_Info_Map[user_idx].pipeMap = tempMap;
-        }
-        
-    }
-
-    if (builtInFlag == -1) {
-        *exit = true;
-    } else if (builtInFlag == 1 && myInfo.argv[0][0] == "who") {
-
-    } else if (builtInFlag == 1 && myInfo.argv[0][0] == "tell") {
-
-    } else if (builtInFlag == 1 && myInfo.argv[0][0] == "yell") {
-
-    } else if (builtInFlag == 1 && myInfo.argv[0][0] == "name") {
-
-    } else if (!builtInFlag) {
-        executeCommand(myInfo, User_Info_Map[user_idx].pipeMap, currentCommandStart, User_Info_Map[user_idx].totalCommandCount);
-        typePrompt(false);
-    }
-
-}
-
-
-void typePrompt(bool showPath) {
-    struct passwd *pw;
-    char hostname[MAX_SIZE], cwd[MAX_SIZE];
-
-    pw = getpwuid(getuid());
-    gethostname(hostname, MAX_SIZE);
-    getcwd(cwd, MAX_SIZE);
-    if (showPath) {
-        cout << pw->pw_name << "@" << hostname << ":~" << cwd << "$ ";
-    } else {
-        cout << "% ";
-    }
-    cout.flush();
-}
-
 // return value: (1) 1, built-in function, continue read next command, (2) -1, exit or ^C (3) 0, not built-in
 int builtInCommand(Info info) {
 
@@ -185,23 +120,190 @@ int builtInCommand(Info info) {
         return 1;
     }
 
+    return 0;
+}
+
+void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, 
+                            bool *exit, const int* const client_fd_table) {
+
+    chdir("working_directory");
+    
+    Info myInfo = {false, {}, {}, {}};
+
+    int commandNum = readCommand(myInfo, User_Info_Map[user_idx].totalCommandCount);
+    if (commandNum < 0) {
+        return;
+    }
+    
+    int builtInFlag = builtInCommand_com_handle(myInfo, User_Info_Map, user_idx, client_fd_table);
+
+    int currentCommandStart = User_Info_Map[user_idx].totalCommandCount;
+    User_Info_Map[user_idx].totalCommandCount += commandNum;
+    
+    for (size_t i = 0; i < myInfo.op.size(); ++i) {
+        if (myInfo.op[i] == PIPE) {
+            map<int, struct pipeStruct> tempMap;
+            for (auto [key, value]:User_Info_Map[user_idx].pipeMap) {
+                if (value.OutCommandIndex > currentCommandStart + (int)i) {
+                    value.OutCommandIndex++;
+                    tempMap[key+1] = value;
+                } else {
+                    tempMap[key] = value;
+                }
+            }
+            User_Info_Map[user_idx].pipeMap = tempMap;
+        }
+        
+    }
+
+    if (builtInFlag == -1) {
+        *exit = true;
+        return;
+    } else if (!builtInFlag) {
+        executeCommand(myInfo, User_Info_Map[user_idx].pipeMap, currentCommandStart, 
+            User_Info_Map[user_idx].totalCommandCount);
+    }
+    typePrompt(false);
+}
+
+void dup2Client(int fd) {
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+}
+
+void broadcast(string msg, const int* const client_fd_table, const map<int, UserInfo> User_Info_Map) {
+    for (auto user : User_Info_Map) {
+        if (client_fd_table[user.first] != -1) {
+            dup2Client(client_fd_table[user.first]);
+            cout << msg << endl;
+        }
+    }
+}
+
+
+void typePrompt(bool showPath) {
+    struct passwd *pw;
+    char hostname[MAX_SIZE], cwd[MAX_SIZE];
+
+    pw = getpwuid(getuid());
+    gethostname(hostname, MAX_SIZE);
+    getcwd(cwd, MAX_SIZE);
+    if (showPath) {
+        cout << pw->pw_name << "@" << hostname << ":~" << cwd << "$ ";
+    } else {
+        cout << "% ";
+    }
+    cout.flush();
+}
+
+
+
+int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, const int user_idx, 
+                            const int* const client_fd_table) {
+
+    // empty line or not single command
+    if (info.argv[0].empty() || info.argv.size() != 1) {
+        return 0;
+    }
+
+    // exit
+    if (info.argv[0][0] == "exit") {
+        return -1;
+    }
+
+    // setenv
+    if (info.argv[0][0] == "setenv") {
+        if (info.argv[0].size() == 3) {
+            User_Info_Map[user_idx].EnvVar[info.argv[0][1]] = info.argv[0][2];
+        } else {
+            cerr << "command [setenv] lost parameter [var] or [value]" << endl;
+        }
+        return 1;
+    }
+
+    // printenv
+    if (info.argv[0][0] == "printenv") {
+        if (info.argv[0].size() == 2 && 
+            User_Info_Map[user_idx].EnvVar.find(info.argv[0][1]) != User_Info_Map[user_idx].EnvVar.end()) {
+            cout << User_Info_Map[user_idx].EnvVar[info.argv[0][1]] << endl;
+        }
+        return 1;
+    }
+
+    // cd
+    if (info.argv[0][0] == "cd") {
+        if (chdir(info.argv[0][1].c_str()) < 0) {
+            cerr << "Error: cd: " << info.argv[0][1] << ": No such file or directory\n";
+        }
+        return 1;
+    }
+
     // who
     if (info.argv[0][0] == "who") {
+        cout << "<ID>\t<nickname>\t<IP:port>\t<indicate me>" << endl;
+        for (auto user : User_Info_Map) {
+            if (client_fd_table[user.first] != -1) {
+                cout << user.first << "\t" << user.second.UserName << "\t" << user.second.IPAddress 
+                     << ":" << user.second.port;
+                if (user_idx == user.first) {
+                    cout << "\t" << "<-me";
+                }
+                cout << endl;
+            }
+        }
         return 1;
     }
 
     // tell
     if (info.argv[0][0] == "tell") {
+        int receiver = stoi(info.argv[0][1]);
+        if (User_Info_Map.find(receiver) == User_Info_Map.end() || client_fd_table[receiver] == -1) {
+            cerr << "*** Error: user #" << receiver << " does not exist yet. ***" << endl;
+        } else {
+            dup2Client(client_fd_table[receiver]);
+            cout << "*** " << User_Info_Map[user_idx].UserName << " told you ***:";
+            for (size_t i = 2; i < info.argv[0].size(); ++i) {
+                cout << " " << info.argv[0][i];
+            }
+            cout << endl;
+            dup2Client(client_fd_table[user_idx]);
+        }
         return 1;
     }
 
     // yell
     if (info.argv[0][0] == "yell") {
+        string yellMsg = "*** " + User_Info_Map[user_idx].UserName + " yelled ***:";
+        for (size_t i = 1; i < info.argv[0].size(); ++i) {
+            yellMsg += (" " + info.argv[0][i]);
+        }
+        broadcast(yellMsg, client_fd_table, User_Info_Map);
+        dup2Client(client_fd_table[user_idx]);
         return 1;
     }
 
     // name
     if (info.argv[0][0] == "name") {
+        bool same_name_exist = false;
+        for (auto user : User_Info_Map) {
+            if (client_fd_table[user.first] != -1) {
+                if (user.second.UserName == info.argv[0][1]) {
+                    cout << "*** User '" << user.second.UserName << "' already exists. ***" << endl;
+                    same_name_exist = true;
+                    break;
+                }
+            }
+        }
+        if (!same_name_exist) {
+            User_Info_Map[user_idx].UserName = info.argv[0][1];
+            string changeNameMsg = "*** User from " + string(User_Info_Map[user_idx].IPAddress) + ":"
+                                 + to_string(User_Info_Map[user_idx].port) + " is named '" 
+                                 + User_Info_Map[user_idx].UserName + "'. ***";
+            broadcast(changeNameMsg, client_fd_table, User_Info_Map);
+            dup2Client(client_fd_table[user_idx]);
+        }
+
         return 1;
     }
 
@@ -282,7 +384,8 @@ int readCommand(Info &info, const int totalCommandCount) {
     return (int)info.argv.size() - (info.op.size() > 1 && info.op[info.op.size()-2] == OUT_RD  ? 1:0);
 }
 
-void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart, const int totalCommandCount) {
+void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart, 
+                    const int totalCommandCount) {
     int status;
 
     for (size_t i = (size_t)currentCommandStart; i < (size_t)totalCommandCount; ++i) {
