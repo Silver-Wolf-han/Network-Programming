@@ -84,7 +84,7 @@ map<int, struct pipeStruct> npshell_handle_one_line(map<int, struct pipeStruct> 
     
     Info myInfo = {false, {}, {}, {}};
 
-    typePrompt(false);
+    
 
     int commandNum = readCommand(myInfo, *totalCommandCount);
     if (commandNum < 0) {
@@ -117,6 +117,7 @@ map<int, struct pipeStruct> npshell_handle_one_line(map<int, struct pipeStruct> 
         *exit = true;
     } else if (!builtInFlag) {
         executeCommand(myInfo, pipeMap, currentCommandStart, *totalCommandCount);
+        typePrompt(false);
     }
 
     return pipeMap;
@@ -135,6 +136,7 @@ void typePrompt(bool showPath) {
     } else {
         cout << "% ";
     }
+    cout.flush();
 }
 
 // return value: (1) 1, built-in function, continue read next command, (2) -1, exit or ^C (3) 0, not built-in

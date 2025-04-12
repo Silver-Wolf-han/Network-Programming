@@ -20,6 +20,5 @@ struct UserInfo {
 };
 
 void singleProcessConcurrentServer(int port);
-void welcomeMsg();
 void dup2Client(int fd);
 void broadcast(string msg);
