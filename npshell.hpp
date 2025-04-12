@@ -58,4 +58,4 @@ void typePrompt(bool showPath);
 int builtInCommand(Info info);
 int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, const int user_idx, const int* const client_fd_table);
 int readCommand(Info &info, const int totalCommandCount);
-void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart, const int totalCommandCount);
+void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart, const int totalCommandCount, const int user_idx, const map<int, UserInfo> User_Info_Map, const int* const client_fd_table);
