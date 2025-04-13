@@ -27,6 +27,8 @@ run_test: all
 clean:
 	rm -f *~ $(PROGS)
 	rm -f *.o
+
+clean_run_test: clean
 	for d in $(DIRS); do $(MAKE) -C $$d clean; done
 	rm -rf working_directory
 
