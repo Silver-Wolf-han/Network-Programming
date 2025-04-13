@@ -3,12 +3,12 @@ CFLAGS	= -Wall -g
 MAKE	= make
 DIRS	= cmd
 
-PROGS	= np_sample np_sample_proc
+PROGS	= np_simple np_single_proc
 
 all:
 	$(CXX) -c npshell.cpp $(CFLAGS) -o npshell.o
-	$(CXX) np_sample.cpp npshell.o $(CFLAGS) -o np_sample
-	$(CXX) np_sample_proc.cpp npshell.o $(CFLAGS) -o np_sample_proc
+	$(CXX) np_simple.cpp npshell.o $(CFLAGS) -o np_simple
+	$(CXX) np_single_proc.cpp npshell.o $(CFLAGS) -o np_single_proc
 
 run_test: all
 	mkdir working_directory

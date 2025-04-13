@@ -1,4 +1,4 @@
-#include "np_sample.hpp"
+#include "np_simple.hpp"
 
 using namespace std;
 
