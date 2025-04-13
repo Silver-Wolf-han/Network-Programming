@@ -160,6 +160,19 @@ void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_i
 
     if (builtInFlag == -1) {
         *exit = true;
+        vector< pair<int,int> > removeList;
+        for (auto &pipe: UserPipes) {
+            if (pipe.first.first == user_idx || pipe.first.second == user_idx) {
+                removeList.push_back(pipe.first);
+            }
+        }
+
+        for (size_t i = 0; i < removeList.size(); ++i) {
+            close(UserPipes[removeList[i]].fd[0]);
+            close(UserPipes[removeList[i]].fd[1]);
+            UserPipes.erase(removeList[i]);
+        }
+
         return;
     } else if (!builtInFlag) {
         executeCommand(myInfo, User_Info_Map[user_idx].pipeMap, currentCommandStart, 
@@ -389,6 +402,42 @@ int readCommand(Info &info, const int totalCommandCount) {
     return (int)info.argv.size() - (info.op.size() > 1 && info.op[info.op.size()-2] == OUT_RD  ? 1:0);
 }
 
+string ReConstructCommand(const Info info, const int currentCommandStart) {
+    string realCommandStr = "";
+    for (size_t i = 0; i < info.argv.size(); ++i) {
+        for (size_t j = 0; j < info.argv[i].size(); ++j) {
+            realCommandStr += ((j == 0 ? "":" ") + info.argv[i][j]);
+        }
+
+        if (info.op[i] != END_OF_COMMAND) {
+            switch(info.op[i]) {
+                case PIPE:
+                    realCommandStr += " | ";
+                    break;
+                case NUM_PIPE:
+                    realCommandStr += (" |" + to_string(info.opOrder[i] - currentCommandStart));
+                    if (i != info.argv.size() - 1) {
+                        realCommandStr += " ";
+                    }
+                    break;
+                case NUM_PIPE_ERR:
+                    realCommandStr += (" !" + to_string(info.opOrder[i] - currentCommandStart));
+                    if (i != info.argv.size() - 1) {
+                        realCommandStr += " ";
+                    }
+                    break;
+                case OUT_RD:
+                    realCommandStr += " < ";
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    
+    return realCommandStr;
+}
+
 void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart, 
                     const int totalCommandCount, const int user_idx, const map<int, UserInfo> User_Info_Map, 
                     const int* const client_fd_table) {
@@ -410,15 +459,15 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
 
         int from_user_pipe = -1, to_user_pipe = -1;
         size_t from_token_idx = 0, to_token_idx = 0;
-        for (size_t i = 0; i < info.argv[argvIndex].size(); ++i) {
-            if (info.argv[argvIndex][i].size() != 1 && info.argv[argvIndex][i][0] == '<') {
-                from_user_pipe = stoi(info.argv[argvIndex][i].substr(1, info.argv[argvIndex][i].size() - 1));
-                from_token_idx = i;
+        for (size_t j = 0; j < info.argv[argvIndex].size(); ++j) {
+            if (info.argv[argvIndex][j].size() != 1 && info.argv[argvIndex][j][0] == '<') {
+                from_user_pipe = stoi(info.argv[argvIndex][j].substr(1, info.argv[argvIndex][j].size() - 1));
+                from_token_idx = j;
             }
 
-            if (info.argv[argvIndex][i].size() != 1 && info.argv[argvIndex][i][0] == '<') {
-                to_user_pipe = stoi(info.argv[argvIndex][i].substr(1, info.argv[argvIndex][i].size() - 1));
-                to_token_idx = i;
+            if (info.argv[argvIndex][j].size() != 1 && info.argv[argvIndex][j][0] == '>') {
+                to_user_pipe = stoi(info.argv[argvIndex][j].substr(1, info.argv[argvIndex][j].size() - 1));
+                to_token_idx = j;
             }
         }
 
@@ -428,22 +477,30 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             if (User_Info_Map.find(from_user_pipe) == User_Info_Map.end() || client_fd_table[from_user_pipe] == -1) {
                 cout << "*** Error: user #" << from_user_pipe << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
-            } else if (UserPipes.find(temp_pair) != UserPipes.end()) {
-                cout << "*** Error: the pipe #" << temp_pair.first << "->" << temp_pair.second << " already exists. ***" << endl;
+                continue;
+            } else if (UserPipes.find(temp_pair) == UserPipes.end()) {
+                cout << "*** Error: the pipe #" << temp_pair.first << "->#" << temp_pair.second 
+                     << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
+                continue;
             } else {
-                // nornal cases:
-                string pipe_in_msg = "*** " + User_Info_Map.at(user_idx).UserName + "(#" + to_string(user_idx)
-                                     + ") just received from " + User_Info_Map.at(to_user_pipe).UserName + "(#" 
-                                     + to_string(to_user_pipe) + ") by '";
-                for (size_t i = 0; i < info.argv[argvIndex].size(); ++i) {
-                    pipe_in_msg += ((i == 0 ? "":" ") + info.argv[argvIndex][i]);
+                string pipe_in_msg = "*** " + User_Info_Map.at(user_idx).UserName 
+                                     + " (#" + to_string(user_idx)+ ") just received from " 
+                                     + User_Info_Map.at(from_user_pipe).UserName + " (#" + to_string(from_user_pipe) + ") by '";
+                
+                pipe_in_msg += ReConstructCommand(info, currentCommandStart);
+                // pipe_in_msg += realCommandStr;
+                /*
+                for (size_t j = 0; j < info.argv[argvIndex].size(); ++j) {
+                    pipe_in_msg += ((j == 0 ? "":" ") + info.argv[argvIndex][j]);
                 }
+                */
+                
                 pipe_in_msg += "' ***";
                 broadcast(pipe_in_msg, client_fd_table, User_Info_Map);
                 dup2Client(client_fd_table[user_idx]);
             }
-            info.argv[argvIndex].erase(info.argv[argvIndex].begin() + from_token_idx);
+            
         }
 
         if (to_user_pipe != -1) {
@@ -452,35 +509,38 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             if (User_Info_Map.find(to_user_pipe) == User_Info_Map.end() || client_fd_table[to_user_pipe] == -1) {
                 cout << "*** Error: user #" << to_user_pipe << " does not exist yet. ***" << endl;
                 to_user_pipe = -1;
-            } else if (UserPipes.find(temp_pair) == UserPipes.end()) {
-                cout << "*** Error: the pipe #" << temp_pair.first << "->" << temp_pair.second << "does not exist yet. ***" << endl;
+                continue;
+            } else if (UserPipes.find(temp_pair) != UserPipes.end()) {
+                cout << "*** Error: the pipe #" << temp_pair.first << "->#" << temp_pair.second << " already exists. ***" << endl;
                 to_user_pipe = -1;
+                continue;
             } else {
-                // normal cases
-                bool dest_pipe_exist = false;
-                for (auto &pipe: UserPipes) {
-                    if (pipe.first.second == to_user_pipe) {
-                        dest_pipe_exist = true;
-                        break;
-                    }
+                // normal cas
+                UserPipes[temp_pair] = {-1, {}, {}, -1};
+                if (pipe(UserPipes[temp_pair].fd) < 0) {
+                    cerr << "Error: Unable to create pipe" << endl;
+                    exit(1);
                 }
 
-                if (!dest_pipe_exist) {
-                    UserPipes[temp_pair] = {-1, {}, {}, -1};
-                    if (pipe(pipeMap[info.opOrder[argvIndex]].fd) < 0) {
-                        cerr << "Error: Unable to create pipe" << endl;
-                        exit(1);
-                    }
+                string pipe_out_msg = "*** " + User_Info_Map.at(user_idx).UserName
+                                      + " (#" + to_string(user_idx) + ") just piped '";
+                pipe_out_msg += ReConstructCommand(info, currentCommandStart);
+                // pipe_out_msg += realCommandStr;
+                /*
+                for (size_t j = 0; j < info.argv[argvIndex].size(); ++j) {
+                    pipe_out_msg += ((j == 0 ? "":" ") + info.argv[argvIndex][j]);
                 }
-
-                string pipe_out_msg = "*** " + User_Info_Map.at(user_idx).UserName + "(#" + to_string(user_idx) + ") just piped '";
-                for (size_t i = 0; i < info.argv[argvIndex].size(); ++i) {
-                    pipe_out_msg += ((i == 0 ? "":" ") + info.argv[argvIndex][i]);
-                }
-                pipe_out_msg += ("' to " + User_Info_Map.at(to_user_pipe).UserName + "(#" + to_string(to_user_pipe) + ")");
+                */
+                pipe_out_msg += ("' to " + User_Info_Map.at(to_user_pipe).UserName + " (#" + to_string(to_user_pipe) + ") ***");
                 broadcast(pipe_out_msg, client_fd_table, User_Info_Map);
                 dup2Client(client_fd_table[user_idx]);
             }
+            
+        }
+        if (from_token_idx != 0) {
+            info.argv[argvIndex].erase(info.argv[argvIndex].begin() + from_token_idx);
+        }
+        if (to_token_idx != 0) {
             info.argv[argvIndex].erase(info.argv[argvIndex].begin() + to_token_idx);
         }
 
@@ -495,6 +555,9 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             }
         }
 
+
+        pair<int,int> temp_pair_input = {from_user_pipe, user_idx};
+        pair<int,int> temp_pair_output = {user_idx, to_user_pipe};
         pid_t pid = fork();
         if (pid < 0) {
             cerr << "Error: Unable to fork" << endl;
@@ -503,18 +566,17 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 close(pipeMap[(int)i].fd[1]);
                 dup2(pipeMap[(int)i].fd[0], STDIN_FILENO);
                 close(pipeMap[(int)i].fd[0]);
-            } else {
-                for (auto &user: UserPipes) {
-                    if (user.first.second == user_idx) {
-                        close(user.second.fd[1]);
-                        dup2(user.second.fd[0], STDIN_FILENO);
-                        close(user.second.fd[0]);
-                        break;
-                    } 
-                }
+            } else if (UserPipes.find(temp_pair_input) != UserPipes.end()) {
+                close(UserPipes[temp_pair_input].fd[1]);
+                dup2(UserPipes[temp_pair_input].fd[0], STDIN_FILENO);
+                close(UserPipes[temp_pair_input].fd[0]);
             }
             
-            if (info.op[argvIndex] == OUT_RD) {
+            if (UserPipes.find(temp_pair_output) != UserPipes.end()) {
+                close(UserPipes[temp_pair_output].fd[0]);
+                dup2(UserPipes[temp_pair_output].fd[1], STDOUT_FILENO);
+                close(UserPipes[temp_pair_output].fd[1]);
+            } else if (info.op[argvIndex] == OUT_RD) {
                 int fd;
                 fd = open(info.argv[argvIndex+1][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
                 if (fd < 0) {
@@ -530,15 +592,6 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 }
                 dup2(pipeMap[info.opOrder[argvIndex]].fd[1], STDOUT_FILENO);
                 close(pipeMap[info.opOrder[argvIndex]].fd[1]);
-            } else {
-                for (auto &user: UserPipes) {
-                    if (user.first.first == user_idx) {
-                        close(user.second.fd[0]);
-                        dup2(user.second.fd[1], STDOUT_FILENO);
-                        close(user.second.fd[1]);
-                        break;
-                    }
-                }
             }
             
             vector<char*> args;
@@ -561,17 +614,10 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 close(pipeMap[(int)i].fd[1]);
             }
 
-            pair<int,int> temp_pair = {-1, -1};
-            for (auto &user: UserPipes) {
-                if (user.first.second == user_idx) {
-                    close(user.second.fd[0]);
-                    close(user.second.fd[1]);
-                    temp_pair = user.first;
-                    break;
-                }
-            }
-            if (temp_pair.first != -1 && temp_pair.second != -1) {
-                UserPipes.erase(temp_pair);
+            if (UserPipes.find(temp_pair_input) != UserPipes.end()) {
+                close(UserPipes[temp_pair_input].fd[0]);
+                close(UserPipes[temp_pair_input].fd[1]);
+                UserPipes.erase(temp_pair_input);
             }
             
             if ((info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD) && pipeMap.find((int)i) != pipeMap.end()) {
