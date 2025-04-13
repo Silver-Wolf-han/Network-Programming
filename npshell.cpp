@@ -537,12 +537,7 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             }
             
         }
-        if (from_token_idx != 0) {
-            info.argv[argvIndex].erase(info.argv[argvIndex].begin() + from_token_idx);
-        }
-        if (to_token_idx != 0) {
-            info.argv[argvIndex].erase(info.argv[argvIndex].begin() + to_token_idx);
-        }
+        
 
         if (info.op[argvIndex] != OUT_RD) {
             if ((info.op[argvIndex] == PIPE || info.op[argvIndex] == NUM_PIPE || info.op[argvIndex] == NUM_PIPE_ERR) && 
@@ -562,6 +557,14 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
         if (pid < 0) {
             cerr << "Error: Unable to fork" << endl;
         } else if (pid == 0) {
+
+            if (from_token_idx != 0) {
+                info.argv[argvIndex].erase(info.argv[argvIndex].begin() + from_token_idx);
+            }
+            if (to_token_idx != 0) {
+                info.argv[argvIndex].erase(info.argv[argvIndex].begin() + to_token_idx);
+            }
+
             if (pipeMap.find((int)i) != pipeMap.end()) {
                 close(pipeMap[(int)i].fd[1]);
                 dup2(pipeMap[(int)i].fd[0], STDIN_FILENO);
