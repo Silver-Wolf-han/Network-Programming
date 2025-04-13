@@ -336,12 +336,13 @@ int readCommand(Info &info, const int totalCommandCount) {
     
     tempArgv.push_back({});
     
-    bool is_tell_or_yell = false;
+    bool is_tell_or_yell = false, is_first_line_first_word = true;
 
     while (iss >> token) {
-        if (command_size == 0 && (token == "yell" || token == "tell")) {
+        if (is_first_line_first_word  && (token == "yell" || token == "tell")) {
             is_tell_or_yell = true;
         }
+        is_first_line_first_word = false;
 
         if (token == "&") {
             info.bg = true;
@@ -477,25 +478,28 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             if (User_Info_Map.find(from_user_pipe) == User_Info_Map.end() || client_fd_table[from_user_pipe] == -1) {
                 cout << "*** Error: user #" << from_user_pipe << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
-                continue;
+                // continue;
+                UserPipes[{from_user_pipe, user_idx}] = {-1, {}, {}, -1};
+                if (pipe(UserPipes[{from_user_pipe, user_idx}].fd) < 0) {
+                    cerr << "Error: Unable to create pipe" << endl;
+                    exit(1);
+                }
             } else if (UserPipes.find(temp_pair) == UserPipes.end()) {
                 cout << "*** Error: the pipe #" << temp_pair.first << "->#" << temp_pair.second 
                      << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
-                continue;
+                // continue;
+                UserPipes[{from_user_pipe, user_idx}] = {-1, {}, {}, -1};
+                if (pipe(UserPipes[{from_user_pipe, user_idx}].fd) < 0) {
+                    cerr << "Error: Unable to create pipe" << endl;
+                    exit(1);
+                }
             } else {
                 string pipe_in_msg = "*** " + User_Info_Map.at(user_idx).UserName 
                                      + " (#" + to_string(user_idx)+ ") just received from " 
                                      + User_Info_Map.at(from_user_pipe).UserName + " (#" + to_string(from_user_pipe) + ") by '";
                 
-                pipe_in_msg += ReConstructCommand(info, currentCommandStart);
-                // pipe_in_msg += realCommandStr;
-                /*
-                for (size_t j = 0; j < info.argv[argvIndex].size(); ++j) {
-                    pipe_in_msg += ((j == 0 ? "":" ") + info.argv[argvIndex][j]);
-                }
-                */
-                
+                pipe_in_msg += ReConstructCommand(info, currentCommandStart);                
                 pipe_in_msg += "' ***";
                 broadcast(pipe_in_msg, client_fd_table, User_Info_Map);
                 dup2Client(client_fd_table[user_idx]);
@@ -509,11 +513,21 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             if (User_Info_Map.find(to_user_pipe) == User_Info_Map.end() || client_fd_table[to_user_pipe] == -1) {
                 cout << "*** Error: user #" << to_user_pipe << " does not exist yet. ***" << endl;
                 to_user_pipe = -1;
-                continue;
+                // continue;
+                UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
+                if (pipe(UserPipes[{user_idx, to_user_pipe}].fd) < 0) {
+                    cerr << "Error: Unable to create pipe" << endl;
+                    exit(1);
+                }
             } else if (UserPipes.find(temp_pair) != UserPipes.end()) {
                 cout << "*** Error: the pipe #" << temp_pair.first << "->#" << temp_pair.second << " already exists. ***" << endl;
                 to_user_pipe = -1;
-                continue;
+                // continue;
+                UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
+                if (pipe(UserPipes[{user_idx, to_user_pipe}].fd) < 0) {
+                    cerr << "Error: Unable to create pipe" << endl;
+                    exit(1);
+                }
             } else {
                 // normal cas
                 UserPipes[temp_pair] = {-1, {}, {}, -1};
@@ -525,12 +539,6 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 string pipe_out_msg = "*** " + User_Info_Map.at(user_idx).UserName
                                       + " (#" + to_string(user_idx) + ") just piped '";
                 pipe_out_msg += ReConstructCommand(info, currentCommandStart);
-                // pipe_out_msg += realCommandStr;
-                /*
-                for (size_t j = 0; j < info.argv[argvIndex].size(); ++j) {
-                    pipe_out_msg += ((j == 0 ? "":" ") + info.argv[argvIndex][j]);
-                }
-                */
                 pipe_out_msg += ("' to " + User_Info_Map.at(to_user_pipe).UserName + " (#" + to_string(to_user_pipe) + ") ***");
                 broadcast(pipe_out_msg, client_fd_table, User_Info_Map);
                 dup2Client(client_fd_table[user_idx]);
@@ -571,13 +579,21 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 close(pipeMap[(int)i].fd[0]);
             } else if (UserPipes.find(temp_pair_input) != UserPipes.end()) {
                 close(UserPipes[temp_pair_input].fd[1]);
-                dup2(UserPipes[temp_pair_input].fd[0], STDIN_FILENO);
+                if (from_user_pipe != -1) {
+                    dup2(UserPipes[temp_pair_input].fd[0], STDIN_FILENO);
+                } else {
+                    dup2(open("/dev/null", O_RDONLY, 0), STDIN_FILENO);
+                }
                 close(UserPipes[temp_pair_input].fd[0]);
             }
             
             if (UserPipes.find(temp_pair_output) != UserPipes.end()) {
                 close(UserPipes[temp_pair_output].fd[0]);
-                dup2(UserPipes[temp_pair_output].fd[1], STDOUT_FILENO);
+                if (to_user_pipe != -1) {
+                    dup2(UserPipes[temp_pair_output].fd[1], STDOUT_FILENO);
+                } else {
+                    dup2(open("/dev/null", O_RDWR, 0), STDOUT_FILENO);
+                }
                 close(UserPipes[temp_pair_output].fd[1]);
             } else if (info.op[argvIndex] == OUT_RD) {
                 int fd;
