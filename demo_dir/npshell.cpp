@@ -52,6 +52,9 @@ int main() {
                     }
                 }
                 pipeMap = tempMap;
+                if (ignore_idx != 0 && (size_t)currentCommandStart + i <= ignore_idx) {
+                    ignore_idx++;
+                }
             } else if (myInfo.op[i] == IGNORE) {
                 map<int, struct pipeStruct> tempMap;
                 for (auto [key, value]:pipeMap) {

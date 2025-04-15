@@ -179,6 +179,10 @@ test.html
 1. op選項當中多加一個`IGNORE:5`
 2. 讀到`%`的時候`info.op=IGNORE`, `info.opOrder=`後面的數字
 3. `pipeMap`要跟著`IGNORE`往後推移 (和多行pipe補救放在一起) ~~demo時忘記做~~
+   :::warning
+   `ignore_idx++`這裡要記得**符合條件時:在要Ignore的期間**把要忽略的行數也要往後移動(`command A | command B`只算一個command)
+   單行那邊不用補就是因為`command %N`, command會直接輸出，後面不會再接pipe
+   :::
 4. 目前的`command index <= ignore_idx`就直接不執行，跳下一個
 5. 執行command時，若`op`為`IGNORE`，則把`opOrder`塞給`ignore_idx`(global變數)
 
