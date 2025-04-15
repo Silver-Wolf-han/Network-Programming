@@ -10,6 +10,7 @@
 #include <pwd.h>        // getpwuid()
 #include <signal.h>     // signal()
 #include <string>
+#include <algorithm>    // find()
 
 constexpr int MAX_SIZE = 1000;
 
@@ -47,6 +48,7 @@ struct UserInfo {
     int totalCommandCount;
     size_t ignore_idx;
     map<int, struct pipeStruct> pipeMap;
+    vector<int> who_block_me;
 };
 
 void npshellInit();

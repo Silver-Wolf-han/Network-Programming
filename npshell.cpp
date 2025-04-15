@@ -293,6 +293,10 @@ int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, cons
         int receiver = stoi(info.argv[0][1]);
         if (User_Info_Map.find(receiver) == User_Info_Map.end() || client_fd_table[receiver] == -1) {
             cerr << "*** Error: user #" << receiver << " does not exist yet. ***" << endl;
+        } else if (find(User_Info_Map[user_idx].who_block_me.begin(), 
+                        User_Info_Map[user_idx].who_block_me.end(), receiver) != 
+                        User_Info_Map[user_idx].who_block_me.end()) {
+            cerr << "*** Error: user #" << receiver << " block you. ***" << endl;
         } else {
             dup2Client(client_fd_table[receiver]);
             cout << "*** " << User_Info_Map[user_idx].UserName << " told you ***:";
@@ -337,6 +341,41 @@ int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, cons
             dup2Client(client_fd_table[user_idx]);
         }
 
+        return 1;
+    }
+
+    if (info.argv[0][0] == "block") {
+        int block_target = stoi(info.argv[0][1]);
+        if (User_Info_Map.find(block_target) == User_Info_Map.end() || client_fd_table[block_target] == -1) {
+            cerr << "*** Error: user #" << block_target << " does not exist yet. ***" << endl;
+        } else {
+            auto it = find(User_Info_Map[block_target].who_block_me.begin(), 
+                           User_Info_Map[block_target].who_block_me.begin(), user_idx);
+            if (it == User_Info_Map[block_target].who_block_me.end()) {
+                // block succes : msg ?
+                User_Info_Map[block_target].who_block_me.push_back(user_idx);
+            } else {
+                cerr << "*** Error: user #" << block_target << " is already blocked. ***" << endl;
+            }
+            
+        }
+        return 1;
+    }
+
+    if (info.argv[0][0] == "unblock") {
+        int un_block_target = stoi(info.argv[0][1]);
+        if (User_Info_Map.find(un_block_target) == User_Info_Map.end() || client_fd_table[un_block_target] == -1) {
+            cerr << "*** Error: user #" << un_block_target << " does not exist yet. ***" << endl;
+        } else {
+            auto it = find(User_Info_Map[un_block_target].who_block_me.begin(), 
+                           User_Info_Map[un_block_target].who_block_me.begin(), user_idx);
+            if (it == User_Info_Map[un_block_target].who_block_me.end()) {
+                cerr << "*** Error: user #" << un_block_target << " does not be blocked by you. ***" << endl;
+            } else {
+                // unlobck succes : msg ?
+                User_Info_Map[un_block_target].who_block_me.erase(it);
+            }
+        }
         return 1;
     }
 
@@ -558,6 +597,17 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                     cerr << "Error: Unable to create pipe" << endl;
                     exit(1);
                 }
+            } else if (find(User_Info_Map.at(user_idx).who_block_me.begin(), 
+                            User_Info_Map.at(user_idx).who_block_me.end(), to_user_pipe) != 
+                            User_Info_Map.at(user_idx).who_block_me.end()) {
+                cerr << "*** Error: user #" << to_user_pipe << " block you. ***" << endl;
+                to_user_pipe = -1;
+                // continue;
+                UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
+                if (pipe(UserPipes[{user_idx, to_user_pipe}].fd) < 0) {
+                    cerr << "Error: Unable to create pipe" << endl;
+                    exit(1);
+                }
             } else {
                 // normal cas
                 UserPipes[temp_pair] = {-1, {}, {}, -1};
@@ -667,6 +717,12 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 close(UserPipes[temp_pair_input].fd[0]);
                 close(UserPipes[temp_pair_input].fd[1]);
                 UserPipes.erase(temp_pair_input);
+            }
+
+            if (temp_pair_output.second == -1 && UserPipes.find(temp_pair_output) != UserPipes.end()) {
+                close(UserPipes[temp_pair_output].fd[0]);
+                close(UserPipes[temp_pair_output].fd[1]);
+                UserPipes.erase(temp_pair_output);
             }
             
             if ((info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD) && pipeMap.find((int)i) != pipeMap.end()) {
