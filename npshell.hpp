@@ -18,7 +18,7 @@ constexpr int PIPE = 1;
 constexpr int NUM_PIPE = 2;
 constexpr int NUM_PIPE_ERR = 3;
 constexpr int OUT_RD = 4;
-// constexpr int IGNORE = 5;
+constexpr int IGNORE = 5;
 
 constexpr int NOT_PIPE = -1;        // opOrder
 constexpr int NOT_NUMBER_PIPE = 1;
@@ -45,18 +45,23 @@ struct UserInfo {
     string UserName;
     map<string, string> EnvVar;
     int totalCommandCount;
+    size_t ignore_idx;
     map<int, struct pipeStruct> pipeMap;
 };
 
 void npshellInit();
 void npshellLoop();
-void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, bool *exit, const int* const client_fd_table);
+void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, bool *exit, 
+                            const int* const client_fd_table);
 void dup2Client(int fd);
 void broadcast(string msg, const int* const client_fd_table, const map<int, UserInfo> User_Info_Map);
 void sigchld_handler(int signo);
 void typePrompt(bool showPath);
 int builtInCommand(Info info);
-int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, const int user_idx, const int* const client_fd_table);
+int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, const int user_idx, 
+                                const int* const client_fd_table);
 int readCommand(Info &info, const int totalCommandCount);
 string ReConstructCommand(const Info info, const int currentCommandStart);
-void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart, const int totalCommandCount, const int user_idx, const map<int, UserInfo> User_Info_Map, const int* const client_fd_table);
+void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart,
+                     const int totalCommandCount, size_t *ignore_idx, const int user_idx, 
+                     const map<int, UserInfo> User_Info_Map, const int* const client_fd_table);

@@ -135,7 +135,7 @@ void singleProcessConcurrentServer(int port) {
             User_Info_Map[(int)push_idx].UserName = "(no name)";
             User_Info_Map[(int)push_idx].EnvVar["PATH"] = "bin:.";
             User_Info_Map[(int)push_idx].totalCommandCount = 0;
-            User_Info_Map[(int)push_idx].pipeMap;
+            User_Info_Map[(int)push_idx].ignore_idx = 0;
 
             // Enveriment Variable Init
             clearenv();

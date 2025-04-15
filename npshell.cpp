@@ -38,6 +38,7 @@ void npshellInit() {
 
 void npshellLoop() {
     int totalCommandCount = 0;
+    size_t ignore_idx = 0;
 
     map<int, struct pipeStruct>  pipeMap;
 
@@ -69,6 +70,16 @@ void npshellLoop() {
                     }
                 }
                 pipeMap = tempMap;
+                if (ignore_idx != 0 && (size_t)currentCommandStart + i <= ignore_idx) {
+                    ignore_idx++;
+                }
+            } else if (myInfo.op[i] == IGNORE) {
+                map<int, struct pipeStruct> tempMap;
+                for (auto [key, value]:pipeMap) {
+                    value.OutCommandIndex += myInfo.opOrder[i] - currentCommandStart;
+                    tempMap[key + myInfo.opOrder[i] - currentCommandStart] = value;
+                }
+                pipeMap = tempMap;
             }
             
         }
@@ -76,7 +87,7 @@ void npshellLoop() {
         if (builtInFlag == -1) {
             break;
         } else if (!builtInFlag) {
-            executeCommand(myInfo, pipeMap, currentCommandStart, totalCommandCount, 0, {}, NULL);
+            executeCommand(myInfo, pipeMap, currentCommandStart, totalCommandCount, &ignore_idx, 0, {}, NULL);
         }
     }
 }
@@ -154,6 +165,16 @@ void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_i
                 }
             }
             User_Info_Map[user_idx].pipeMap = tempMap;
+            if (User_Info_Map[user_idx].ignore_idx != 0 && (size_t)currentCommandStart + i <= User_Info_Map[user_idx].ignore_idx) {
+                User_Info_Map[user_idx].ignore_idx++;
+            }
+        } else if (myInfo.op[i] == IGNORE) {
+            map<int, struct pipeStruct> tempMap;
+            for (auto [key, value]:User_Info_Map[user_idx].pipeMap) {
+                value.OutCommandIndex += myInfo.opOrder[i] - currentCommandStart;
+                tempMap[key + myInfo.opOrder[i] - currentCommandStart] = value;
+            }
+            User_Info_Map[user_idx].pipeMap = tempMap;
         }
         
     }
@@ -176,7 +197,7 @@ void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_i
         return;
     } else if (!builtInFlag) {
         executeCommand(myInfo, User_Info_Map[user_idx].pipeMap, currentCommandStart, 
-            User_Info_Map[user_idx].totalCommandCount, user_idx, User_Info_Map, client_fd_table);
+            User_Info_Map[user_idx].totalCommandCount, &(User_Info_Map[user_idx].ignore_idx), user_idx, User_Info_Map, client_fd_table);
     }
     typePrompt(false);
 }
@@ -346,34 +367,43 @@ int readCommand(Info &info, const int totalCommandCount) {
 
         if (token == "&") {
             info.bg = true;
-        } else if (!is_tell_or_yell && (token == ">" || token[0] == '|' || token[0] == '!')) {
+        } else if (!is_tell_or_yell && (token == ">" || token[0] == '|' || token[0] == '!' || token[0] == '%')) {
             info.op.push_back(
                 (token == ">" ? OUT_RD: 
                     (token == "|" ? PIPE:
                         (token[0] == '|'? NUM_PIPE:
-                            NUM_PIPE_ERR)
+                            (token[0] == '!'? NUM_PIPE_ERR:
+                                IGNORE    
+                            )
+                        )
                     )
                 )
             );
+            int opOrder = 0;
+            size_t prev_start = 1;
+            for(size_t i = 1; i < token.size(); ++i) {
+                if (token[i] == '+') {
+                    opOrder += stoi(token.substr(prev_start, i - prev_start));
+                    prev_start = i + 1;
+                }
+            }
+            if (token.size() != 1) {
+                opOrder += stoi(token.substr(prev_start, token.size() - prev_start));
+            }
             info.opOrder.push_back(
                 (token == ">" ? NOT_PIPE : totalCommandCount + command_size + 
-                    (token.size() == 1 ? NOT_NUMBER_PIPE:stoi(token.substr(1, token.size() - 1))))
+                    (token.size() == 1 ? NOT_NUMBER_PIPE:opOrder))
             );
             command_size++;
             tempArgv.push_back({});
-        } /*else if (token[0] == '%') {
-            info.op.push_back(IGNORE);
-            info.opOrder.push_back(totalCommandCount + command_size + stoi(token.substr(1, token.size() - 1)));
-            command_size++;
-            tempArgv.push_back({});
-        } */else {
+        } else {
             tempArgv[command_size].push_back(token);
         }
 
         // Fix number_pipe output
         if (!is_tell_or_yell && token == "|") {
             for (size_t i = 0; i < info.opOrder.size(); ++i) {
-                if (info.op[i] == NUM_PIPE && (int)i + info.opOrder[i] < totalCommandCount + command_size + 1) {
+                if ((info.op[i] == NUM_PIPE || info.op[i] == NUM_PIPE_ERR || info.op[i] == IGNORE) && (int)i + info.opOrder[i] < totalCommandCount + command_size + 1) {
                     info.opOrder[i]++;
                 }
             }
@@ -440,23 +470,23 @@ string ReConstructCommand(const Info info, const int currentCommandStart) {
 }
 
 void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart, 
-                    const int totalCommandCount, const int user_idx, const map<int, UserInfo> User_Info_Map, 
+                    const int totalCommandCount, size_t *ignore_idx, const int user_idx, const map<int, UserInfo> User_Info_Map, 
                     const int* const client_fd_table) {
     int status;
 
     for (size_t i = (size_t)currentCommandStart; i < (size_t)totalCommandCount; ++i) {
-        /*
-        if (var != 0 && i <= var) {
+        
+        if (*ignore_idx != 0 && i <= *ignore_idx) {
             continue;
         }
-        */
+        
 
         size_t argvIndex = i - (size_t)currentCommandStart;
-        /*
+        
         if (info.op[argvIndex] == IGNORE) {
-            var = info.opOrder[argvIndex];
+            *ignore_idx = info.opOrder[argvIndex];
         }
-        */
+        
 
         int from_user_pipe = -1, to_user_pipe = -1;
         size_t from_token_idx = 0, to_token_idx = 0;
@@ -643,7 +673,7 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 for (pid_t pid_i: pipeMap[(int)i].relate_pids) {
                     waitpid(pid_i, &status, 0);
                 }
-            } else if (info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD /*|| info.op[argvIndex] == IGNORE*/) {
+            } else if (info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD || info.op[argvIndex] == IGNORE) {
                 waitpid(pid, &status, 0);
             }
         }
