@@ -17,6 +17,7 @@ constexpr int PIPE = 1;
 constexpr int NUM_PIPE = 2;
 constexpr int NUM_PIPE_ERR = 3;
 constexpr int OUT_RD = 4;
+constexpr int IGNORE = 5;
 
 constexpr int NOT_PIPE = -1;        // opOrder
 constexpr int NOT_NUMBER_PIPE = 1;

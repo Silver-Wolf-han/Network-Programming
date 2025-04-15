@@ -13,6 +13,8 @@
 
 using namespace std;
 
+size_t ignore_idx = 0;
+
 int main() {
     signal(SIGCHLD, sigchld_handler);
 
@@ -38,12 +40,6 @@ int main() {
         int currentCommandStart = totalCommandCount;
         totalCommandCount += commandNum;
         
-        
-        /*
-        for (auto [key, value]:pipeMap) {
-            cout << key << " " << value.OutCommandIndex << endl;
-        }
-        */
         for (size_t i = 0; i < myInfo.op.size(); ++i) {
             if (myInfo.op[i] == PIPE) {
                 map<int, struct pipeStruct> tempMap;
@@ -54,6 +50,13 @@ int main() {
                     } else {
                         tempMap[key] = value;
                     }
+                }
+                pipeMap = tempMap;
+            } else if (myInfo.op[i] == IGNORE) {
+                map<int, struct pipeStruct> tempMap;
+                for (auto [key, value]:pipeMap) {
+                    value.OutCommandIndex += myInfo.opOrder[i] - currentCommandStart;
+                    tempMap[key + myInfo.opOrder[i] - currentCommandStart] = value;
                 }
                 pipeMap = tempMap;
             }
@@ -153,18 +156,32 @@ int readCommand(Info &info, const int totalCommandCount) {
     while (iss >> token) {
         if (token == "&") {
             info.bg = true;
-        } else if (token == ">" || token[0] == '|' || token[0] == '!') {
+        } else if (token == ">" || token[0] == '|' || token[0] == '!' || token[0] == '%') {
             info.op.push_back(
                 (token == ">" ? OUT_RD: 
                     (token == "|" ? PIPE:
                         (token[0] == '|'? NUM_PIPE:
-                            NUM_PIPE_ERR)
+                            (token[0] == '!'? NUM_PIPE_ERR:
+                                IGNORE    
+                            )
+                        )
                     )
                 )
             );
+            int opOrder = 0;
+            size_t prev_start = 1;
+            for(size_t i = 1; i < token.size(); ++i) {
+                if (token[i] == '+') {
+                    opOrder += stoi(token.substr(prev_start, i - prev_start));
+                    prev_start = i + 1;
+                }
+            }
+            if (token.size() != 1) {
+                opOrder += stoi(token.substr(prev_start, token.size() - prev_start));
+            }
             info.opOrder.push_back(
                 (token == ">" ? NOT_PIPE : totalCommandCount + command_size + 
-                    (token.size() == 1 ? NOT_NUMBER_PIPE:stoi(token.substr(1, token.size() - 1))))
+                    (token.size() == 1 ? NOT_NUMBER_PIPE:opOrder))
             );
             command_size++;
             tempArgv.push_back({});
@@ -175,7 +192,8 @@ int readCommand(Info &info, const int totalCommandCount) {
         // Fix number_pipe output
         if (token == "|") {
             for (size_t i = 0; i < info.opOrder.size(); ++i) {
-                if (info.op[i] == NUM_PIPE && (int)i + info.opOrder[i] < totalCommandCount + command_size + 1) {
+                if ((info.op[i] == NUM_PIPE || info.op[i] == NUM_PIPE_ERR || info.op[i] == IGNORE) 
+                    && (int)i + info.opOrder[i] < totalCommandCount + command_size + 1) {
                     info.opOrder[i]++;
                 }
             }
@@ -209,8 +227,15 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
     int status;
 
     for (size_t i = (size_t)currentCommandStart; i < (size_t)totalCommandCount; ++i) {
+        if (ignore_idx != 0 && i <= ignore_idx) {
+            continue;
+        }
 
         size_t argvIndex = i - (size_t)currentCommandStart;
+
+        if (info.op[argvIndex] == IGNORE) {
+            ignore_idx = info.opOrder[argvIndex];
+        }
 
         if (info.op[argvIndex] != OUT_RD) {
             if ((info.op[argvIndex] == PIPE || info.op[argvIndex] == NUM_PIPE || info.op[argvIndex] == NUM_PIPE_ERR) && 
@@ -275,7 +300,7 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 for (pid_t pid_i: pipeMap[(int)i].relate_pids) {
                     waitpid(pid_i, &status, 0);
                 }
-            } else if (info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD) {
+            } else if (info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD || info.op[argvIndex] == IGNORE) {
                 waitpid(pid, &status, 0);
             }
         }

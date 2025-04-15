@@ -1,4 +1,4 @@
-# project-1-Silver-Wolf-han
+# Project 1
 
 ## header (shell.hpp)
 
@@ -60,6 +60,16 @@ argv = {                       op = {                oporder = {
 ```
 
 ## source code (shell.cpp)
+
+### sigchld_handler
+```=cpp
+signal(SIGCHLD, sigchld_handler);
+void sigchld_handler(int signo) {
+    while(waitpid(-1, NULL, WNOHANG) > 0);
+}
+```
+註冊一個function來處理當process收到SIGCHLD signal。
+透過flag`WNOHANG`來避免blocking，如果沒有child要結束就離開。
 
 ### typePrompt
 ```=cpp
@@ -123,7 +133,80 @@ return type    : void
 
 3. `while (waitpid(-1, &status, WNOHANG)>0);`
     結束所有zombie processes
-    
+
+### main function
+1. 設定環境變數 PATH="bin:."
+2. print prompt
+3. readCommand and get #com
+4. update counter
+5. 過程處理Number Pipe與Ordiray pipe的counter問題-多行
+    ```=bash
+    % removetag test.html |2
+    % removetag test.html | number
+    % number
+    ```
+    需要將第一個`removetag` command pipe給第三行的`number`
+    處理方式：在執行下一個command之前，先掃描該行當中是否有Ordiray pipe(`'|'`)
+    如果有的話，則檢查pipe input type是否為Number Pipe且是否超過目前執行行數
+    若以上條件皆成立，則需要調整該條pipe的output至下一個(直接使用新的pipeMap來取代)
+6. 若built-in command為`exit`，則跳至第九步
+7. executecommand
+8. 回到step 2
+9. 結束
+
+### demo part
+八題抽一題
+
+第六題 Ignore N line command (`%N`)
+```=bash
+% ls |5
+% ls |2
+% ls %2            # ignore 接下來兩行，目前的結果直接輸出
+bin
+test.html
+% cat              # ignore
+% number test.html # ignore
+% cat              # from ls|2, not from ls |5
+bin
+test.html
+% noop
+% number           # from ls |5
+    1 bin
+    2 test.html
+% exit
+```
+~~當初Demo我寫的是錯的，我把`ls |5`丟給cat，結果是一樣~~
+1. op選項當中多加一個`IGNORE:5`
+2. 讀到`%`的時候`info.op=IGNORE`, `info.opOrder=`後面的數字
+3. `pipeMap`要跟著`IGNORE`往後推移 (和多行pipe補救放在一起) ~~demo時忘記做~~
+4. 目前的`command index <= ignore_idx`就直接不執行，跳下一個
+5. 執行command時，若`op`為`IGNORE`，則把`opOrder`塞給`ignore_idx`(global變數)
+
+第七題 Implement "+", there is no space between "+" (不小心拍到的)
+```=bash
+% ls |1+2
+% noop
+% noop
+% number
+    1 bin
+    2 test.html
+% # 剩下的沒拍到
+```
+就 在 填info.opOrder的時候，處理一下token讓他可以接"+"就好
+```=cpp
+size_t prev_start = 1;
+for (size_t i = 1; i < token.size(); ++i) {
+    if (token[i] == '+') {
+        opOrder += stoi(token.substr(prev_start, i - prev_start));
+        prev_start = i + 1;
+    }
+}
+if (token.size() != 1) {
+    opOrder += stoi(token.substr(prev_start, token.size() - prev_start));
+}
+```
+
+
 ## Body (remain.cpp)
 :::danger
 以每個command的輸出創造pipe
