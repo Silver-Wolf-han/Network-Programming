@@ -192,10 +192,10 @@ void singleProcessConcurrentServer(int port) {
                 bool exit = false;
                 npshell_handle_one_line(User_Info_Map, i, &exit, client_fd_table);
 
+                dup2(4, STDIN_FILENO);
+                dup2(5, STDOUT_FILENO);
+                dup2(6, STDERR_FILENO);
                 if (exit) {
-                    dup2(4, STDIN_FILENO);
-                    dup2(5, STDOUT_FILENO);
-                    dup2(6, STDERR_FILENO);
                     close(client_fd_table[i]);
                     FD_CLR(client_fd_table[i], &all_fd_set);
                     client_fd_table[i] = -1;
@@ -203,9 +203,7 @@ void singleProcessConcurrentServer(int port) {
                     broadcast(logout_msg, client_fd_table, User_Info_Map);
                     User_Info_Map.erase(i);
                 }
-                dup2(4, STDIN_FILENO);
-                dup2(5, STDOUT_FILENO);
-                dup2(6, STDERR_FILENO);
+
                 if (select_reply_fd_count <= 0) {
                     break;
                 }

@@ -16,8 +16,6 @@ using namespace std;
 
 map<pair<int,int>, struct pipeStruct> UserPipes;
 
-//size_t var = 0;
-
 /*
 int main(int argc, char* argv[]) {
     npshellInit();
@@ -52,7 +50,6 @@ void npshellLoop() {
             continue;
         }
         
-        
         int builtInFlag = builtInCommand(myInfo);
 
         int currentCommandStart = totalCommandCount;
@@ -81,7 +78,6 @@ void npshellLoop() {
                 }
                 pipeMap = tempMap;
             }
-            
         }
 
         if (builtInFlag == -1) {
@@ -344,36 +340,21 @@ int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, cons
         return 1;
     }
 
-    if (info.argv[0][0] == "block") {
-        int block_target = stoi(info.argv[0][1]);
-        if (User_Info_Map.find(block_target) == User_Info_Map.end() || client_fd_table[block_target] == -1) {
-            cerr << "*** Error: user #" << block_target << " does not exist yet. ***" << endl;
+    if (info.argv[0][0] == "block" || info.argv[0][0] == "unblock") {
+        int block_idx = stoi(info.argv[0][1]);
+        if (User_Info_Map.find(block_idx) == User_Info_Map.end() || client_fd_table[block_idx] == -1) {
+            cerr << "*** Error: user #" << block_idx << " does not exist yet. ***" << endl;
         } else {
-            auto it = find(User_Info_Map[block_target].who_block_me.begin(), 
-                           User_Info_Map[block_target].who_block_me.begin(), user_idx);
-            if (it == User_Info_Map[block_target].who_block_me.end()) {
-                // block succes : msg ?
-                User_Info_Map[block_target].who_block_me.push_back(user_idx);
-            } else {
-                cerr << "*** Error: user #" << block_target << " is already blocked. ***" << endl;
-            }
-            
-        }
-        return 1;
-    }
-
-    if (info.argv[0][0] == "unblock") {
-        int un_block_target = stoi(info.argv[0][1]);
-        if (User_Info_Map.find(un_block_target) == User_Info_Map.end() || client_fd_table[un_block_target] == -1) {
-            cerr << "*** Error: user #" << un_block_target << " does not exist yet. ***" << endl;
-        } else {
-            auto it = find(User_Info_Map[un_block_target].who_block_me.begin(), 
-                           User_Info_Map[un_block_target].who_block_me.begin(), user_idx);
-            if (it == User_Info_Map[un_block_target].who_block_me.end()) {
-                cerr << "*** Error: user #" << un_block_target << " does not be blocked by you. ***" << endl;
-            } else {
-                // unlobck succes : msg ?
-                User_Info_Map[un_block_target].who_block_me.erase(it);
+            auto it = find(User_Info_Map[block_idx].who_block_me.begin(), 
+                           User_Info_Map[block_idx].who_block_me.begin(), user_idx);
+            if (info.argv[0][0] == "block" && it == User_Info_Map[block_idx].who_block_me.end()) {
+                User_Info_Map[block_idx].who_block_me.push_back(user_idx);
+            } else if (info.argv[0][0] == "block" && it != User_Info_Map[block_idx].who_block_me.end()) {
+                cerr << "*** Error: user #" << block_idx << " is already blocked. ***" << endl;
+            } else if (info.argv[0][0] == "unblock" && it == User_Info_Map[block_idx].who_block_me.end()) {
+                cerr << "*** Error: user #" << block_idx << " does not be blocked by you. ***" << endl;
+            } else if (info.argv[0][0] == "unblock" && it != User_Info_Map[block_idx].who_block_me.end()) {
+                User_Info_Map[block_idx].who_block_me.erase(it);
             }
         }
         return 1;
@@ -514,18 +495,15 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
     int status;
 
     for (size_t i = (size_t)currentCommandStart; i < (size_t)totalCommandCount; ++i) {
-        
         if (*ignore_idx != 0 && i <= *ignore_idx) {
             continue;
         }
         
-
         size_t argvIndex = i - (size_t)currentCommandStart;
         
         if (info.op[argvIndex] == IGNORE) {
             *ignore_idx = info.opOrder[argvIndex];
         }
-        
 
         int from_user_pipe = -1, to_user_pipe = -1;
         size_t from_token_idx = 0, to_token_idx = 0;
@@ -534,7 +512,6 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 from_user_pipe = stoi(info.argv[argvIndex][j].substr(1, info.argv[argvIndex][j].size() - 1));
                 from_token_idx = j;
             }
-
             if (info.argv[argvIndex][j].size() != 1 && info.argv[argvIndex][j][0] == '>') {
                 to_user_pipe = stoi(info.argv[argvIndex][j].substr(1, info.argv[argvIndex][j].size() - 1));
                 to_token_idx = j;
@@ -542,22 +519,18 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
         }
 
         if (from_user_pipe != -1) {
-            
-            pair<int,int> temp_pair = {from_user_pipe, user_idx};
             if (User_Info_Map.find(from_user_pipe) == User_Info_Map.end() || client_fd_table[from_user_pipe] == -1) {
                 cout << "*** Error: user #" << from_user_pipe << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
-                // continue;
                 UserPipes[{from_user_pipe, user_idx}] = {-1, {}, {}, -1};
                 if (pipe(UserPipes[{from_user_pipe, user_idx}].fd) < 0) {
                     cerr << "Error: Unable to create pipe" << endl;
                     exit(1);
                 }
-            } else if (UserPipes.find(temp_pair) == UserPipes.end()) {
-                cout << "*** Error: the pipe #" << temp_pair.first << "->#" << temp_pair.second 
+            } else if (UserPipes.find({from_user_pipe, user_idx}) == UserPipes.end()) {
+                cout << "*** Error: the pipe #" << from_user_pipe << "->#" << user_idx 
                      << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
-                // continue;
                 UserPipes[{from_user_pipe, user_idx}] = {-1, {}, {}, -1};
                 if (pipe(UserPipes[{from_user_pipe, user_idx}].fd) < 0) {
                     cerr << "Error: Unable to create pipe" << endl;
@@ -567,7 +540,6 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 string pipe_in_msg = "*** " + User_Info_Map.at(user_idx).UserName 
                                      + " (#" + to_string(user_idx)+ ") just received from " 
                                      + User_Info_Map.at(from_user_pipe).UserName + " (#" + to_string(from_user_pipe) + ") by '";
-                
                 pipe_in_msg += ReConstructCommand(info, currentCommandStart);                
                 pipe_in_msg += "' ***";
                 broadcast(pipe_in_msg, client_fd_table, User_Info_Map);
@@ -577,45 +549,22 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
         }
 
         if (to_user_pipe != -1) {
-            
-            pair<int,int> temp_pair = {user_idx, to_user_pipe};
             if (User_Info_Map.find(to_user_pipe) == User_Info_Map.end() || client_fd_table[to_user_pipe] == -1) {
                 cout << "*** Error: user #" << to_user_pipe << " does not exist yet. ***" << endl;
                 to_user_pipe = -1;
-                // continue;
                 UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
-                if (pipe(UserPipes[{user_idx, to_user_pipe}].fd) < 0) {
-                    cerr << "Error: Unable to create pipe" << endl;
-                    exit(1);
-                }
-            } else if (UserPipes.find(temp_pair) != UserPipes.end()) {
-                cout << "*** Error: the pipe #" << temp_pair.first << "->#" << temp_pair.second << " already exists. ***" << endl;
+            } else if (UserPipes.find({user_idx, to_user_pipe}) != UserPipes.end()) {
+                cout << "*** Error: the pipe #" << user_idx << "->#" << to_user_pipe << " already exists. ***" << endl;
                 to_user_pipe = -1;
-                // continue;
                 UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
-                if (pipe(UserPipes[{user_idx, to_user_pipe}].fd) < 0) {
-                    cerr << "Error: Unable to create pipe" << endl;
-                    exit(1);
-                }
             } else if (find(User_Info_Map.at(user_idx).who_block_me.begin(), 
                             User_Info_Map.at(user_idx).who_block_me.end(), to_user_pipe) != 
                             User_Info_Map.at(user_idx).who_block_me.end()) {
                 cerr << "*** Error: user #" << to_user_pipe << " block you. ***" << endl;
                 to_user_pipe = -1;
-                // continue;
                 UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
-                if (pipe(UserPipes[{user_idx, to_user_pipe}].fd) < 0) {
-                    cerr << "Error: Unable to create pipe" << endl;
-                    exit(1);
-                }
             } else {
-                // normal cas
-                UserPipes[temp_pair] = {-1, {}, {}, -1};
-                if (pipe(UserPipes[temp_pair].fd) < 0) {
-                    cerr << "Error: Unable to create pipe" << endl;
-                    exit(1);
-                }
-
+                // normal case
                 string pipe_out_msg = "*** " + User_Info_Map.at(user_idx).UserName
                                       + " (#" + to_string(user_idx) + ") just piped '";
                 pipe_out_msg += ReConstructCommand(info, currentCommandStart);
@@ -623,9 +572,11 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 broadcast(pipe_out_msg, client_fd_table, User_Info_Map);
                 dup2Client(client_fd_table[user_idx]);
             }
-            
+            if (pipe(UserPipes[{user_idx, to_user_pipe}].fd) < 0) {
+                cerr << "Error: Unable to create pipe" << endl;
+                exit(1);
+            }
         }
-        
 
         if (info.op[argvIndex] != OUT_RD) {
             if ((info.op[argvIndex] == PIPE || info.op[argvIndex] == NUM_PIPE || info.op[argvIndex] == NUM_PIPE_ERR) && 
