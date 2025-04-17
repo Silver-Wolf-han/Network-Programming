@@ -64,6 +64,7 @@ struct UserInfo {
 
 void sigchld_handler(int signo);
 void sendMsg(int signo);
+void receiveFifo(int signo);
 void release_share_memory(int signo);
 void npshellInit();
 void npshellLoop(const size_t user_idx);
@@ -74,7 +75,7 @@ int builtInCommand(Info info, const size_t user_idx);
 int readCommand(Info &info, const int totalCommandCount);
 string ReConstructCommand(const Info info, const int currentCommandStart);
 void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart,
-                     const int totalCommandCount, size_t *ignore_idx);
+                     const int totalCommandCount, size_t *ignore_idx, const size_t user_idx);
 void broadcast(string msg);
 void dup2Client(int fd);
 
