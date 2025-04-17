@@ -2,6 +2,9 @@
 
 using namespace std;
 
+int UserInfo_fd, MSG_fd;
+struct UserInfo* UserInfo;
+char* msg;
 
 int main(int argc, char* argv[]) {
     
@@ -17,6 +20,10 @@ int main(int argc, char* argv[]) {
 
 
 void concurentConnectionOrientedServer(int port) {
+
+    signal(SIGINT, release_share_memory);
+    signal(SIGUSR1, sendMsg);
+
     int server_fd, client_fd;
     struct sockaddr_in server_addr, client_addr;
     socklen_t sin_size;
@@ -52,7 +59,7 @@ void concurentConnectionOrientedServer(int port) {
         exit(1);
     }
 
-    // zombie processes ??
+    // zombie processes
     sa.sa_handler = sigchld_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
@@ -60,6 +67,33 @@ void concurentConnectionOrientedServer(int port) {
         cerr << "sigaction error" << endl;
         exit(1);
     }
+
+    // share memory
+    UserInfo_fd = shm_open("UserInfo", O_CREAT | O_RDWR, 0666);
+    MSG_fd = shm_open("msg", O_CREAT | O_RDWR, 0666);
+    if (UserInfo_fd == -1 || MSG_fd == -1) {
+        cerr << "shmm_open error" << endl;
+        exit(1);
+    }
+    // set size
+    ftruncate(UserInfo_fd, MAX_CLIENT * sizeof(struct UserInfo));
+    ftruncate(MSG_fd, MAX_COMMAND_SIZE);
+    // map to memory
+    UserInfo = (struct UserInfo *)mmap(0, MAX_CLIENT * sizeof(struct UserInfo), 
+                                        PROT_READ | PROT_WRITE, MAP_SHARED, UserInfo_fd, 0);
+    msg = (char *)mmap(0, MAX_COMMAND_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, MSG_fd, 0);
+    // init share memory
+    for (size_t i = 0; i < MAX_CLIENT; ++i) {
+        UserInfo[i].client_fd = -1;
+        UserInfo[i].pid = 0;
+        UserInfo[i].port = 0;
+        memset(UserInfo[i].IPAddress, '\0', sizeof(UserInfo[i].IPAddress));
+        memset(UserInfo[i].UserName, '\0', NAME_SIZE);
+    }
+
+    memset(msg, '\0', MAX_COMMAND_SIZE);
+    
+    // signal(SIGCHLD, sigchld_handler);
 
     cout << "Server is listening on port:" << port << "..." << endl;
 
@@ -71,6 +105,14 @@ void concurentConnectionOrientedServer(int port) {
             cout << "accept error" << endl;
             continue;
         }
+
+        size_t user_idx = 0;
+        for (size_t i = 1; i < MAX_CLIENT; ++i) {
+            if (UserInfo[i].client_fd == -1) {
+                user_idx = i;
+                break;
+            }
+        }
         
         pid_t pid = fork();
         if (pid < 0) {
@@ -78,23 +120,497 @@ void concurentConnectionOrientedServer(int port) {
             exit(1);
         } else if (pid == 0) {
             close(server_fd);
-
-            dup2(client_fd, STDIN_FILENO);
-            dup2(client_fd, STDOUT_FILENO);
-            dup2(client_fd, STDERR_FILENO);
-
-            // run npshell here
-            npshellInit();
-            npshellLoop();
-
+            dup2Client(client_fd);
             close(client_fd);
+            
+            while(UserInfo[user_idx].client_fd == -1) {
+                usleep(1000);
+            }
+
+            npshellInit();
+            cout << "****************************************" << endl;
+            cout << "** Welcome to the information server. **" << endl;
+            cout << "****************************************" << endl;
+            string welmsg = "*** User '" + string(UserInfo[user_idx].UserName) + 
+                "' entered from " + UserInfo[user_idx].IPAddress + 
+                ":" + to_string(UserInfo[user_idx].port) + ". ***";
+            broadcast(welmsg);
+            npshellLoop(user_idx);
+
+            string leave_msg = "*** User '" + string(UserInfo[user_idx].UserName) + "' left. ***";
+            broadcast(leave_msg);
+            UserInfo[user_idx].client_fd = -1;
+            UserInfo[user_idx].pid = 0;
+            UserInfo[user_idx].port = 0;
+            memset(UserInfo[user_idx].IPAddress, '\0', INET_ADDRSTRLEN);
+            memset(UserInfo[user_idx].UserName, '\0', NAME_SIZE);
 
             exit(0);
             
         } else {
             close(client_fd);
+            UserInfo[user_idx].pid = pid;
+            inet_ntop(AF_INET, &(client_addr.sin_addr), UserInfo[user_idx].IPAddress, INET_ADDRSTRLEN);
+            UserInfo[user_idx].port = ntohs(client_addr.sin_port);
+            strcpy(UserInfo[user_idx].UserName, "(no name)");
+            UserInfo[user_idx].client_fd = client_fd;
         }
         
     }
 
+}
+
+void sigchld_handler(int signo) {
+    while(waitpid(-1, NULL, WNOHANG) > 0);
+}
+
+void sendMsg(int signo) {
+    if (signo == SIGUSR1) {
+        cout << msg << endl;
+    }
+}
+
+void release_share_memory(int signo) {
+    if (signo == SIGINT) {
+        munmap(UserInfo, MAX_CLIENT * sizeof(struct UserInfo));
+        munmap(msg, MAX_COMMAND_SIZE);
+        exit(0);
+    }
+}
+
+void npshellInit() {
+    signal(SIGCHLD, sigchld_handler);
+    chdir("working_directory");
+    setenv("PATH", "bin:.", 1);
+}
+
+void npshellLoop(const size_t user_idx) {
+    int totalCommandCount = 0;
+    size_t ignore_idx = 0;
+
+    map<int, struct pipeStruct>  pipeMap;
+
+    while (true) {
+        Info myInfo = {false, {}, {}, {}};
+
+        typePrompt(false);
+
+        int commandNum = readCommand(myInfo, totalCommandCount);
+        if (commandNum < 0) {
+            continue;
+        }
+        
+        int builtInFlag = builtInCommand(myInfo, user_idx);
+
+        int currentCommandStart = totalCommandCount;
+        totalCommandCount += commandNum;
+        
+        for (size_t i = 0; i < myInfo.op.size(); ++i) {
+            if (myInfo.op[i] == PIPE) {
+                map<int, struct pipeStruct> tempMap;
+                for (auto [key, value]:pipeMap) {
+                    if (value.OutCommandIndex > currentCommandStart + (int)i) {
+                        value.OutCommandIndex++;
+                        tempMap[key+1] = value;
+                    } else {
+                        tempMap[key] = value;
+                    }
+                }
+                pipeMap = tempMap;
+                if (ignore_idx != 0 && (size_t)currentCommandStart + i <= ignore_idx) {
+                    ignore_idx++;
+                }
+            } else if (myInfo.op[i] == IGNORE) {
+                map<int, struct pipeStruct> tempMap;
+                for (auto [key, value]:pipeMap) {
+                    value.OutCommandIndex += myInfo.opOrder[i] - currentCommandStart;
+                    tempMap[key + myInfo.opOrder[i] - currentCommandStart] = value;
+                }
+                pipeMap = tempMap;
+            }
+        }
+
+        if (builtInFlag == -1) {
+            break;
+        } else if (!builtInFlag) {
+            executeCommand(myInfo, pipeMap, currentCommandStart, totalCommandCount, &ignore_idx);
+        }
+    }
+}
+
+// return value: (1) 1, built-in function, continue read next command, (2) -1, exit or ^C (3) 0, not built-in
+int builtInCommand(Info info, const size_t user_idx) {
+
+    // empty line or not single command
+    if (info.argv[0].empty() || info.argv.size() != 1) {
+        return 0;
+    }
+
+    // exit
+    if (info.argv[0][0] == "exit") {
+        return -1;
+    }
+
+    // setenv
+    if (info.argv[0][0] == "setenv") {
+        if (info.argv[0].size() == 3) {
+            setenv(info.argv[0][1].c_str(), info.argv[0][2].c_str(), 1);
+        } else {
+            cerr << "command [setenv] lost parameter [var] or [value]" << endl;
+        }
+        return 1;
+    }
+
+    // printenv
+    if (info.argv[0][0] == "printenv") {
+        if (info.argv[0].size() == 2) {
+            if (const char* env_p = getenv(info.argv[0][1].c_str())) {
+                cout << env_p << endl;
+            }
+        }
+        return 1;
+    }
+
+    // cd
+    if (info.argv[0][0] == "cd") {
+        if (chdir(info.argv[0][1].c_str()) < 0) {
+            cerr << "Error: cd: " << info.argv[0][1] << ": No such file or directory\n";
+        }
+        return 1;
+    }
+
+    // who
+    if (info.argv[0][0] == "who") {
+        cout << "<ID>\t<nickname>\t<IP:port>\t<indicate me>" << endl;
+        for (size_t i = 1; i < MAX_CLIENT; ++i) {
+            if (UserInfo[i].client_fd != -1) {
+                cout << i << "\t" << UserInfo[i].UserName << "\t" << UserInfo[i].IPAddress 
+                     << ":" << UserInfo[i].port;
+                if (i == user_idx) {
+                    cout << "\t" << "<-me";
+                }
+                cout << endl;
+            }
+        }
+        return 1;
+    }
+
+    // tell
+    if (info.argv[0][0] == "tell") {
+        int receiver = stoi(info.argv[0][1]);
+        if (UserInfo[receiver].client_fd == -1) {
+            cerr << "*** Error: user #" << receiver << " does not exist yet. ***" << endl;
+        } /* else if (find(UserInfo[user_idx].who_block_me.begin(), 
+                        UserInfo[user_idx].who_block_me.end(), receiver) != 
+                        UserInfo[user_idx].who_block_me.end()) {
+            cerr << "*** Error: user #" << receiver << " block you. ***" << endl;
+        } */else {
+            string tellmsg = "*** " + string(UserInfo[user_idx].UserName) + " told you ***:";
+            for (size_t i = 2; i < info.argv[0].size(); ++i) {
+                tellmsg += (" " + info.argv[0][i]);
+            }
+            memset(msg, '\0', MAX_COMMAND_SIZE);
+            strcpy(msg, tellmsg.c_str());
+            if (UserInfo[receiver].client_fd != -1) {
+                kill(UserInfo[receiver].pid, SIGUSR1);
+            }
+        }
+        return 1;
+    }
+
+    // yell
+    if (info.argv[0][0] == "yell") {
+        string yellMsg = "*** " + string(UserInfo[user_idx].UserName) + " yelled ***:";
+        for (size_t i = 1; i < info.argv[0].size(); ++i) {
+            yellMsg += (" " + info.argv[0][i]);
+        }
+        broadcast(yellMsg);
+        return 1;
+    }
+
+    // name
+    if (info.argv[0][0] == "name") {
+        bool same_name_exist = false;
+        for (size_t i = 1; i < MAX_CLIENT; ++i) {
+            if (UserInfo[i].client_fd != -1 && string(UserInfo[i].UserName) == info.argv[0][1]) {
+                cout << "*** User '" << UserInfo[i].UserName << "' already exists. ***" << endl;
+                same_name_exist = true;
+                break;
+            }
+        }
+        if (!same_name_exist) {
+            strcpy(UserInfo[user_idx].UserName, info.argv[0][1].c_str());
+            string changeNameMsg = "*** User from " + string(UserInfo[user_idx].IPAddress) + ":"
+                                 + to_string(UserInfo[user_idx].port) + " is named '" 
+                                 + string(UserInfo[user_idx].UserName) + "'. ***";
+            broadcast(changeNameMsg);
+        }
+
+        return 1;
+    }
+    /*
+    if (info.argv[0][0] == "block" || info.argv[0][0] == "unblock") {
+        int block_idx = stoi(info.argv[0][1]);
+        if (UserInfo[block_idx].client_fd == -1 || block_idx >= MAX_CLIENT) {
+            cerr << "*** Error: user #" << block_idx << " does not exist yet. ***" << endl;
+        } else {
+            auto it = find(UserInfo[block_idx].who_block_me.begin(), 
+                           UserInfo[block_idx].who_block_me.begin(), user_idx);
+            if (info.argv[0][0] == "block" && it == UserInfo[block_idx].who_block_me.end()) {
+                UserInfo[block_idx].who_block_me.push_back(user_idx);
+            } else if (info.argv[0][0] == "block" && it != UserInfo[block_idx].who_block_me.end()) {
+                cerr << "*** Error: user #" << block_idx << " is already blocked. ***" << endl;
+            } else if (info.argv[0][0] == "unblock" && it == UserInfo[block_idx].who_block_me.end()) {
+                cerr << "*** Error: user #" << block_idx << " does not be blocked by you. ***" << endl;
+            } else if (info.argv[0][0] == "unblock" && it != UserInfo[block_idx].who_block_me.end()) {
+                UserInfo[block_idx].who_block_me.erase(it);
+            }
+        }
+        return 1;
+    }
+    */
+    return 0;
+}
+
+void typePrompt(bool showPath) {
+    struct passwd *pw;
+    char hostname[MAX_SIZE], cwd[MAX_SIZE];
+
+    pw = getpwuid(getuid());
+    gethostname(hostname, MAX_SIZE);
+    getcwd(cwd, MAX_SIZE);
+    if (showPath) {
+        cout << pw->pw_name << "@" << hostname << ":~" << cwd << "$ ";
+    } else {
+        cout << "% ";
+    }
+    cout.flush();
+}
+
+int readCommand(Info &info, const int totalCommandCount) {
+    vector<vector<string>> tempArgv;
+    string command;
+
+    if (!getline(cin, command)) {
+        return -1;
+    }
+
+    istringstream iss(command);
+    string token;
+    int command_size = 0;
+    
+    tempArgv.push_back({});
+    
+    bool is_tell_or_yell = false, is_first_line_first_word = true;
+
+    while (iss >> token) {
+        if (is_first_line_first_word  && (token == "yell" || token == "tell")) {
+            is_tell_or_yell = true;
+        }
+        is_first_line_first_word = false;
+
+        if (token == "&") {
+            info.bg = true;
+        } else if (!is_tell_or_yell && (token == ">" || token[0] == '|' || token[0] == '!' || token[0] == '%')) {
+            info.op.push_back(
+                (token == ">" ? OUT_RD: 
+                    (token == "|" ? PIPE:
+                        (token[0] == '|'? NUM_PIPE:
+                            (token[0] == '!'? NUM_PIPE_ERR:
+                                IGNORE    
+                            )
+                        )
+                    )
+                )
+            );
+            int opOrder = 0;
+            size_t prev_start = 1;
+            for(size_t i = 1; i < token.size(); ++i) {
+                if (token[i] == '+') {
+                    opOrder += stoi(token.substr(prev_start, i - prev_start));
+                    prev_start = i + 1;
+                }
+            }
+            if (token.size() != 1) {
+                opOrder += stoi(token.substr(prev_start, token.size() - prev_start));
+            }
+            info.opOrder.push_back(
+                (token == ">" ? NOT_PIPE : totalCommandCount + command_size + 
+                    (token.size() == 1 ? NOT_NUMBER_PIPE:opOrder))
+            );
+            command_size++;
+            tempArgv.push_back({});
+        } else {
+            tempArgv[command_size].push_back(token);
+        }
+
+        // Fix number_pipe output
+        if (!is_tell_or_yell && token == "|") {
+            for (size_t i = 0; i < info.opOrder.size(); ++i) {
+                if ((info.op[i] == NUM_PIPE || info.op[i] == NUM_PIPE_ERR || info.op[i] == IGNORE) && (int)i + info.opOrder[i] < totalCommandCount + command_size + 1) {
+                    info.opOrder[i]++;
+                }
+            }
+        }
+    }
+    
+    
+    if (tempArgv[0].empty()) {
+        return -1;
+    }
+    
+    for (size_t i = 0; i < info.op.size(); ++i) {
+        if (info.op[i] && tempArgv[i+1].empty()) {
+            //cerr << "Error: Syntax error near unexpected token 'newline'\n";
+            //return -1;
+            tempArgv.erase(tempArgv.begin() + i + 1);
+            break;
+        }
+    }
+    
+    info.argv = tempArgv;
+
+    if (info.argv.size() != info.op.size()) {
+        info.op.push_back(END_OF_COMMAND);
+        info.opOrder.push_back(NOT_PIPE);
+    }
+    return (int)info.argv.size() - (info.op.size() > 1 && info.op[info.op.size()-2] == OUT_RD  ? 1:0);
+}
+
+string ReConstructCommand(const Info info, const int currentCommandStart) {
+    string realCommandStr = "";
+    for (size_t i = 0; i < info.argv.size(); ++i) {
+        for (size_t j = 0; j < info.argv[i].size(); ++j) {
+            realCommandStr += ((j == 0 ? "":" ") + info.argv[i][j]);
+        }
+
+        if (info.op[i] != END_OF_COMMAND) {
+            switch(info.op[i]) {
+                case PIPE:
+                    realCommandStr += " | ";
+                    break;
+                case NUM_PIPE:
+                    realCommandStr += (" |" + to_string(info.opOrder[i] - currentCommandStart));
+                    if (i != info.argv.size() - 1) {
+                        realCommandStr += " ";
+                    }
+                    break;
+                case NUM_PIPE_ERR:
+                    realCommandStr += (" !" + to_string(info.opOrder[i] - currentCommandStart));
+                    if (i != info.argv.size() - 1) {
+                        realCommandStr += " ";
+                    }
+                    break;
+                case OUT_RD:
+                    realCommandStr += " < ";
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    
+    return realCommandStr;
+}
+
+void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart, 
+                    const int totalCommandCount, size_t *ignore_idx) {
+    int status;
+
+    for (size_t i = (size_t)currentCommandStart; i < (size_t)totalCommandCount; ++i) {
+        if (*ignore_idx != 0 && i <= *ignore_idx) {
+            continue;
+        }
+        
+        size_t argvIndex = i - (size_t)currentCommandStart;
+        
+        if (info.op[argvIndex] == IGNORE) {
+            *ignore_idx = info.opOrder[argvIndex];
+        }
+
+        if (info.op[argvIndex] != OUT_RD) {
+            if ((info.op[argvIndex] == PIPE || info.op[argvIndex] == NUM_PIPE || info.op[argvIndex] == NUM_PIPE_ERR) && 
+            pipeMap.find(info.opOrder[argvIndex]) == pipeMap.end()) {
+                pipeMap[info.opOrder[argvIndex]] = {info.opOrder[argvIndex], {}, {}, info.op[argvIndex]};
+                if (pipe(pipeMap[info.opOrder[argvIndex]].fd) < 0) {
+                    cerr << "Error: Unable to create pipe" << endl;
+                    exit(1);
+                }
+            }
+        }
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            cerr << "Error: Unable to fork" << endl;
+        } else if (pid == 0) {
+            if (pipeMap.find((int)i) != pipeMap.end()) {
+                close(pipeMap[(int)i].fd[1]);
+                dup2(pipeMap[(int)i].fd[0], STDIN_FILENO);
+                close(pipeMap[(int)i].fd[0]);
+            }
+            
+            if (info.op[argvIndex] == OUT_RD) {
+                int fd;
+                fd = open(info.argv[argvIndex+1][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+                if (fd < 0) {
+                    cerr << "Error: " << info.argv[argvIndex+1][0] << ": Failed to open or create file\n";
+                    exit(1);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            } else if (info.op[argvIndex] == PIPE || info.op[argvIndex] == NUM_PIPE || info.op[argvIndex] == NUM_PIPE_ERR) {
+                close(pipeMap[info.opOrder[argvIndex]].fd[0]);
+                if (info.op[argvIndex] == NUM_PIPE_ERR) {
+                    dup2(pipeMap[info.opOrder[argvIndex]].fd[1], STDERR_FILENO);
+                }
+                dup2(pipeMap[info.opOrder[argvIndex]].fd[1], STDOUT_FILENO);
+                close(pipeMap[info.opOrder[argvIndex]].fd[1]);
+            }
+            
+            vector<char*> args;
+            for (auto &arg : info.argv[argvIndex]) {
+                args.push_back(arg.data());
+            }
+            args.push_back(nullptr);
+
+            if (execvp(args[0], args.data()) == -1) {
+                cerr << "Unknown command: [" << args[0] << "]." << endl;
+                exit(1);
+            }
+        } else {
+            if (pipeMap.find((int)i) != pipeMap.end()) {
+                pipeMap[(int)i].relate_pids.push_back(pid);
+            }
+
+            if (pipeMap.find((int)i) != pipeMap.end()) {
+                close(pipeMap[(int)i].fd[0]);
+                close(pipeMap[(int)i].fd[1]);
+            }
+            
+            if ((info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD) && pipeMap.find((int)i) != pipeMap.end()) {
+                for (pid_t pid_i: pipeMap[(int)i].relate_pids) {
+                    waitpid(pid_i, &status, 0);
+                }
+            } else if (info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD || info.op[argvIndex] == IGNORE) {
+                waitpid(pid, &status, 0);
+            }
+        }
+    }
+    while (waitpid(-1, &status, WNOHANG) > 0);
+}
+
+void broadcast(string broadcastMsg) {
+    memset(msg, '\0', MAX_COMMAND_SIZE);
+    strcpy(msg, broadcastMsg.c_str());
+    for (size_t i = 1; i < MAX_CLIENT; ++i) {
+        if (UserInfo[i].client_fd != -1) {
+            kill(UserInfo[i].pid, SIGUSR1);
+        }
+    }
+}
+
+void dup2Client(int fd) {
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
 }

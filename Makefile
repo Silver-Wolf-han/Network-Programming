@@ -3,11 +3,10 @@ CFLAGS	= -Wall -g
 MAKE	= make
 DIRS	= cmd
 
-PROGS	= np_simple np_multi_proc
+PROGS	= np_multi_proc
 
 all:
-	$(CXX) -c npshell.cpp $(CFLAGS) -o npshell.o
-	$(CXX) np_multi_proc.cpp npshell.o $(CFLAGS) -o np_multi_proc
+	$(CXX) np_multi_proc.cpp $(CFLAGS) -o np_multi_proc
 
 test: all
 	mkdir working_directory
@@ -26,8 +25,6 @@ test: all
 
 clean:
 	rm -f *~ $(PROGS)
-	rm -f *.o
 
 clean_test: clean
 	rm -rf working_directory
-
