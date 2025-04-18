@@ -7,6 +7,7 @@ struct UserInfo* UserInfo;
 char* msg;
 int *UserPipeMatrix;
 bool receive = false;
+size_t user_idx_glob;
 
 int main(int argc, char* argv[]) {
     
@@ -98,7 +99,8 @@ void concurentConnectionOrientedServer(int port) {
     }
 
     memset(msg, '\0', MAX_COMMAND_SIZE);
-    memset(UserPipeMatrix, 0, MAX_CLIENT * MAX_CLIENT * sizeof(int));
+    memset(UserPipeMatrix, -1, MAX_CLIENT * MAX_CLIENT * sizeof(int));
+    // -2: block -1: unuse 0: enablue >0: keep fd from by open
     
     // signal(SIGCHLD, sigchld_handler);
 
@@ -117,6 +119,7 @@ void concurentConnectionOrientedServer(int port) {
         for (size_t i = 1; i < MAX_CLIENT; ++i) {
             if (UserInfo[i].client_fd == -1) {
                 user_idx = i;
+                user_idx_glob = i;
                 break;
             }
         }
@@ -136,8 +139,8 @@ void concurentConnectionOrientedServer(int port) {
 
             for (size_t i = 1; i < MAX_CLIENT; ++i) {
                 if (UserInfo[i].client_fd != -1) {
-                    UserPipeMatrix[user_idx * MAX_CLIENT + i] = 1;
-                    UserPipeMatrix[i * MAX_CLIENT + user_idx] = 1;
+                    UserPipeMatrix[user_idx * MAX_CLIENT + i] = 0;
+                    UserPipeMatrix[i * MAX_CLIENT + user_idx] = 0;
                 }
             }
 
@@ -165,11 +168,10 @@ void concurentConnectionOrientedServer(int port) {
                 fifo = "user_pipe/"+to_string(j)+"-"+to_string(user_idx);
                 strcpy(fifoName, fifo.c_str());
                 unlink(fifoName);
-                UserPipeMatrix[j * MAX_CLIENT + user_idx] = 0;
                 fifo = "user_pipe/"+to_string(user_idx)+"-"+to_string(j);
                 strcpy(fifoName, fifo.c_str());
                 unlink(fifoName);
-                UserPipeMatrix[j * MAX_CLIENT + user_idx] = 0;
+                UserPipeMatrix[j * MAX_CLIENT + user_idx] = -1;
             }
 
             exit(0);
@@ -199,7 +201,14 @@ void sendMsg(int signo) {
 
 void receiveFifo(int signo) {
     if (signo == SIGUSR2) {
-        receive = true;
+        for (size_t i = 1; i < MAX_CLIENT; ++i) {
+            if (UserPipeMatrix[i * MAX_CLIENT + user_idx_glob] == -3) {
+                char fifoName[NAME_SIZE];
+                string fifo = "user_pipe/"+to_string(i)+"-"+to_string(user_idx_glob);
+                strcpy(fifoName, fifo.c_str());
+                UserPipeMatrix[i * MAX_CLIENT + user_idx_glob] = open(fifoName, O_RDONLY | O_NONBLOCK);
+            }
+        }
     }
 }
 
@@ -332,9 +341,9 @@ int builtInCommand(Info info, const size_t user_idx) {
     // tell
     if (info.argv[0][0] == "tell") {
         int receiver = stoi(info.argv[0][1]);
-        if (UserInfo[receiver].client_fd == -1) {
+        if (UserInfo[receiver].client_fd == -1 || receiver >= MAX_CLIENT) {
             cerr << "*** Error: user #" << receiver << " does not exist yet. ***" << endl;
-        }  else if (UserPipeMatrix[user_idx * MAX_CLIENT + receiver] == -1) {
+        }  else if (UserPipeMatrix[receiver * MAX_CLIENT + user_idx] == -2) {
             cerr << "*** Error: user #" << receiver << " block you. ***" << endl;
         } else {
             string tellmsg = "*** " + string(UserInfo[user_idx].UserName) + " told you ***:";
@@ -386,14 +395,14 @@ int builtInCommand(Info info, const size_t user_idx) {
         if (UserInfo[block_idx].client_fd == -1 || block_idx >= MAX_CLIENT) {
             cerr << "*** Error: user #" << block_idx << " does not exist yet. ***" << endl;
         } else {
-            if (info.argv[0][0] == "block" && UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] == 1) {
-                UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] = -1;
-            } else if (info.argv[0][0] == "block" && UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] == -1) {
+            if (info.argv[0][0] == "block" && UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] == 0) {
+                UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] = -2;
+            } else if (info.argv[0][0] == "block" && UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] == -2) {
                 cerr << "*** Error: user #" << block_idx << " is already blocked. ***" << endl;
-            } else if (info.argv[0][0] == "unblock" && UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] == 1) {
+            } else if (info.argv[0][0] == "unblock" && UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] == 0) {
                 cerr << "*** Error: user #" << block_idx << " does not be blocked by you. ***" << endl;
-            } else if (info.argv[0][0] == "unblock" && UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] == -1) {
-                UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] = 1;
+            } else if (info.argv[0][0] == "unblock" && UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] == -2) {
+                UserPipeMatrix[user_idx * MAX_CLIENT + block_idx] = 0;
             }
         }
         return 1;
@@ -572,7 +581,7 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
         }
 
         if (from_user_pipe != -1) {
-            if (UserInfo[from_user_pipe].client_fd == -1) {
+            if (UserInfo[from_user_pipe].client_fd == -1 || from_user_pipe >= MAX_CLIENT) {
                 cout << "*** Error: user #" << from_user_pipe << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
                 /*
@@ -582,7 +591,7 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                     exit(1);
                 }
                 */
-            } else if (UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx] != 2) {
+            } else if (UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx] == 0) {
                 cout << "*** Error: the pipe #" << from_user_pipe << "->#" << user_idx 
                      << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
@@ -604,15 +613,15 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
         }
 
         if (to_user_pipe != -1) {
-            if (UserInfo[to_user_pipe].client_fd == -1) {
+            if (UserInfo[to_user_pipe].client_fd == -1 || to_user_pipe >= MAX_CLIENT) {
                 cout << "*** Error: user #" << to_user_pipe << " does not exist yet. ***" << endl;
                 to_user_pipe = -1;
                 // UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
-            } else if (UserPipeMatrix[user_idx * MAX_CLIENT + to_user_pipe] == 2) {
+            } else if (UserPipeMatrix[user_idx * MAX_CLIENT + to_user_pipe] > 0) {
                 cout << "*** Error: the pipe #" << user_idx << "->#" << to_user_pipe << " already exists. ***" << endl;
                 to_user_pipe = -1;
                 // UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
-            } else if (UserPipeMatrix[user_idx * MAX_CLIENT + to_user_pipe] == -1) {
+            } else if (UserPipeMatrix[to_user_pipe * MAX_CLIENT + user_idx] == -2) {
                 cerr << "*** Error: user #" << to_user_pipe << " block you. ***" << endl;
                 to_user_pipe = -1;
                 // UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
@@ -659,22 +668,25 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 close(pipeMap[(int)i].fd[1]);
                 dup2(pipeMap[(int)i].fd[0], STDIN_FILENO);
                 close(pipeMap[(int)i].fd[0]);
-            } else if (from_user_pipe != -1) {
-                while (!receive);
-                receive = false;
-                string fifo = "user_pipe/"+to_string(from_user_pipe)+"-"+to_string(user_idx);
-                char fifoName[NAME_SIZE];
-                if (UserPipeMatrix[from_user_pipe * MAX_CLIENT + to_user_pipe] == 2) {
-                    strcpy(fifoName, fifo.c_str());
-                    int fd = open(fifoName, O_WRONLY);
-                    dup2(fd, STDOUT_FILENO);
-                    close(fd);
-                    UserPipeMatrix[from_user_pipe * MAX_CLIENT + to_user_pipe] = 1;
-                }
-            } else if (from_user_pipe == -1 && to_token_idx != 0) {
+            } else if (from_user_pipe == -1 && from_token_idx != 0) {
                 dup2(open("/dev/null", O_RDONLY, 0), STDIN_FILENO);
-            }
-            
+            } else if (from_user_pipe != -1) {
+                // while (!receive);
+                // receive = false;
+                // string fifo = "user_pipe/"+to_string(from_user_pipe)+"-"+to_string(user_idx);
+                // char fifoName[NAME_SIZE];
+                if (UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx] > 0) {
+
+                    // strcpy(fifoName, fifo.c_str());
+                    // int fd = open(fifoName, O_RDONLY);
+                    dup2(UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx], STDIN_FILENO);
+                    close(UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx]);
+                    UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx] = 0;
+                } else {
+                    dup2(open("/dev/null", O_RDONLY, 0), STDIN_FILENO);
+                }
+            } 
+            // cout << "to:" << to_user_pipe << endl;
             if (info.op[argvIndex] == OUT_RD) {
                 int fd;
                 fd = open(info.argv[argvIndex+1][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
@@ -691,20 +703,25 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 }
                 dup2(pipeMap[info.opOrder[argvIndex]].fd[1], STDOUT_FILENO);
                 close(pipeMap[info.opOrder[argvIndex]].fd[1]);
+            } else if (to_user_pipe == -1 && to_token_idx != 0) {
+                dup2(open("/dev/null", O_RDWR, 0), STDOUT_FILENO);
             } else if (to_user_pipe != -1) {
                 string fifo = "user_pipe/"+to_string(user_idx)+"-"+to_string(to_user_pipe);
                 char fifoName[NAME_SIZE];
 
                 strcpy(fifoName, fifo.c_str());
                 mkfifo(fifoName, 0666);
-                UserPipeMatrix[user_idx * MAX_CLIENT + to_user_pipe] = 2;
+                UserPipeMatrix[user_idx * MAX_CLIENT + to_user_pipe] = -3;
                 kill(UserInfo[to_user_pipe].pid, SIGUSR2);
                 int fd = open(fifoName, O_WRONLY);
-                dup2(fd, STDIN_FILENO);
-                close(fd);
-            } else if (to_user_pipe == -1 && to_token_idx != 0) {
-                dup2(open("/dev/null", O_RDWR, 0), STDOUT_FILENO);
-            }
+                
+                if (fd == -1) {
+                    dup2(open("/dev/null", O_RDWR, 0), STDOUT_FILENO);
+                } else {
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                }
+            } 
             
             vector<char*> args;
             for (auto &arg : info.argv[argvIndex]) {
@@ -733,6 +750,14 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             } else if (info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD || info.op[argvIndex] == IGNORE) {
                 waitpid(pid, &status, 0);
             }
+
+            if (from_user_pipe != -1 && from_token_idx != 0) {
+                waitpid(pid, &status, 0);
+                string fifo = "user_pipe/"+to_string(from_user_pipe)+"-"+to_string(user_idx);
+                char fifoName[NAME_SIZE];
+                strcpy(fifoName, fifo.c_str());
+                unlink(fifoName);
+            } 
         }
     }
     while (waitpid(-1, &status, WNOHANG) > 0);
@@ -746,6 +771,7 @@ void broadcast(string broadcastMsg) {
             kill(UserInfo[i].pid, SIGUSR1);
         }
     }
+    usleep(1000);
 }
 
 void dup2Client(int fd) {
