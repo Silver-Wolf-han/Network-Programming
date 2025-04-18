@@ -6,7 +6,6 @@ int UserInfo_fd, MSG_fd, UserPipeMatrix_fd;
 struct UserInfo* UserInfo;
 char* msg;
 int *UserPipeMatrix;
-bool receive = false;
 size_t user_idx_glob;
 
 int main(int argc, char* argv[]) {
@@ -101,8 +100,6 @@ void concurentConnectionOrientedServer(int port) {
     memset(msg, '\0', MAX_COMMAND_SIZE);
     memset(UserPipeMatrix, -1, MAX_CLIENT * MAX_CLIENT * sizeof(int));
     // -2: block -1: unuse 0: enablue >0: keep fd from by open
-    
-    // signal(SIGCHLD, sigchld_handler);
 
     cout << "Server is listening on port:" << port << "..." << endl;
 
@@ -584,24 +581,10 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             if (UserInfo[from_user_pipe].client_fd == -1 || from_user_pipe >= MAX_CLIENT) {
                 cout << "*** Error: user #" << from_user_pipe << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
-                /*
-                UserPipes[{from_user_pipe, user_idx}] = {-1, {}, {}, -1};
-                if (pipe(UserPipes[{from_user_pipe, user_idx}].fd) < 0) {
-                    cerr << "Error: Unable to create pipe" << endl;
-                    exit(1);
-                }
-                */
             } else if (UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx] == 0) {
                 cout << "*** Error: the pipe #" << from_user_pipe << "->#" << user_idx 
                      << " does not exist yet. ***" << endl;
                 from_user_pipe = -1;
-                /*
-                UserPipes[{from_user_pipe, user_idx}] = {-1, {}, {}, -1};
-                if (pipe(UserPipes[{from_user_pipe, user_idx}].fd) < 0) {
-                    cerr << "Error: Unable to create pipe" << endl;
-                    exit(1);
-                }
-                */
             } else {
                 string pipe_in_msg = "*** " + string(UserInfo[user_idx].UserName)
                                      + " (#" + to_string(user_idx)+ ") just received from " 
@@ -616,15 +599,12 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             if (UserInfo[to_user_pipe].client_fd == -1 || to_user_pipe >= MAX_CLIENT) {
                 cout << "*** Error: user #" << to_user_pipe << " does not exist yet. ***" << endl;
                 to_user_pipe = -1;
-                // UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
             } else if (UserPipeMatrix[user_idx * MAX_CLIENT + to_user_pipe] > 0) {
                 cout << "*** Error: the pipe #" << user_idx << "->#" << to_user_pipe << " already exists. ***" << endl;
                 to_user_pipe = -1;
-                // UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
             } else if (UserPipeMatrix[to_user_pipe * MAX_CLIENT + user_idx] == -2) {
                 cerr << "*** Error: user #" << to_user_pipe << " block you. ***" << endl;
                 to_user_pipe = -1;
-                // UserPipes[{user_idx, to_user_pipe}] = {-1, {}, {}, -1};
             } else {
                 // normal case
                 string pipe_out_msg = "*** " + string(UserInfo[user_idx].UserName)
@@ -633,12 +613,6 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 pipe_out_msg += ("' to " + string(UserInfo[to_user_pipe].UserName) + " (#" + to_string(to_user_pipe) + ") ***");
                 broadcast(pipe_out_msg);
             }
-            /*
-            if (pipe(UserPipes[{user_idx, to_user_pipe}].fd) < 0) {
-                cerr << "Error: Unable to create pipe" << endl;
-                exit(1);
-            }
-            */
         }
 
         if (info.op[argvIndex] != OUT_RD) {
@@ -671,22 +645,15 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
             } else if (from_user_pipe == -1 && from_token_idx != 0) {
                 dup2(open("/dev/null", O_RDONLY, 0), STDIN_FILENO);
             } else if (from_user_pipe != -1) {
-                // while (!receive);
-                // receive = false;
-                // string fifo = "user_pipe/"+to_string(from_user_pipe)+"-"+to_string(user_idx);
-                // char fifoName[NAME_SIZE];
                 if (UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx] > 0) {
-
-                    // strcpy(fifoName, fifo.c_str());
-                    // int fd = open(fifoName, O_RDONLY);
                     dup2(UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx], STDIN_FILENO);
                     close(UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx]);
                     UserPipeMatrix[from_user_pipe * MAX_CLIENT + user_idx] = 0;
                 } else {
                     dup2(open("/dev/null", O_RDONLY, 0), STDIN_FILENO);
                 }
-            } 
-            // cout << "to:" << to_user_pipe << endl;
+            }
+
             if (info.op[argvIndex] == OUT_RD) {
                 int fd;
                 fd = open(info.argv[argvIndex+1][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);

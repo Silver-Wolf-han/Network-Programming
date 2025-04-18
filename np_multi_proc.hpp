@@ -56,10 +56,6 @@ struct UserInfo {
     char IPAddress[INET_ADDRSTRLEN];
     int port;
     char UserName[NAME_SIZE];
-    // int totalCommandCount;
-    // size_t ignore_idx;
-    // map<int, struct pipeStruct> pipeMap;
-    // vector<int> who_block_me;
 };
 
 void sigchld_handler(int signo);
