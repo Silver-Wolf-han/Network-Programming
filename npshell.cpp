@@ -286,7 +286,18 @@ int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, cons
 
     // tell
     if (info.argv[0][0] == "tell") {
-        int receiver = stoi(info.argv[0][1]);
+        int receiver = -1;
+        for(auto user: User_Info_Map) {
+            //cout << user.second.UserName << endl;
+            if (user.second.UserName == info.argv[0][1]) {
+                receiver = user.first;
+            }
+        }
+        if (receiver == -1) {
+            receiver = stoi(info.argv[0][1]);
+        }
+        // int receiver = stoi(info.argv[0][1]);
+        // cout << receiver << endl;
         if (User_Info_Map.find(receiver) == User_Info_Map.end() || client_fd_table[receiver] == -1) {
             cerr << "*** Error: user #" << receiver << " does not exist yet. ***" << endl;
         } else if (find(User_Info_Map[user_idx].who_block_me.begin(), 

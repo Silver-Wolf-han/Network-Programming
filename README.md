@@ -1,4 +1,4 @@
-# project-2-Silver-Wolf-han
+# Project 2
 
 # Part 1 Concurent Connection-Oriented Server
 
@@ -290,6 +290,11 @@ map<pair<int,int>, struct pipeStruct> UserPipes;
 
 
 ### demo part
+真正的demo (~~抽到送分題~~)
+實作`tell username msg`
+恩對阿 就 在receiver前多掃一次`User_Info_Map` 如果`info.argv[0][1]==user.second.UserName`就表示是用名字傳送的，如果不是就是`stoi`接數字
+~~在demo的時候把`127.0.0.1`打成`172.0.0.1`差點出大事~~
+
 自己偷跑寫`block`和`unblock` (~~寫了四個小時..十分鐘怎麼可能寫得完~~)
 自訂spec
 1. 若A 下`block B`
