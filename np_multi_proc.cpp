@@ -710,11 +710,11 @@ void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int c
                 close(pipeMap[(int)i].fd[1]);
             }
             
-            if ((info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD) && pipeMap.find((int)i) != pipeMap.end()) {
+            if (((info.op[argvIndex] == END_OF_COMMAND && to_user_pipe == -1) || info.op[argvIndex] == OUT_RD) && pipeMap.find((int)i) != pipeMap.end()) {
                 for (pid_t pid_i: pipeMap[(int)i].relate_pids) {
                     waitpid(pid_i, &status, 0);
                 }
-            } else if (info.op[argvIndex] == END_OF_COMMAND || info.op[argvIndex] == OUT_RD || info.op[argvIndex] == IGNORE) {
+            } else if ((info.op[argvIndex] == END_OF_COMMAND && to_user_pipe == -1) || info.op[argvIndex] == OUT_RD || info.op[argvIndex] == IGNORE) {
                 waitpid(pid, &status, 0);
             }
 

@@ -1,4 +1,4 @@
-# project-3-Silver-Wolf-Han
+# Project 3
 
 ## header (np_multi_proc.hpp)
 把Project 2的`npshell.hpp`和`np_single_proc.hpp`融合(~~Global Variable哈哈~~)
@@ -29,10 +29,16 @@ pid_t pid;
     二維陣列(概念上`UserPipeMartirx[i][j]` 實際上`UserPipeMatrix[i * MAC_CLIENT + j]`來表示User i 對 User j的狀態)
     -1: 還沒啟用(要馬 User i 不在要馬 User j 不在)
      0: 兩個User都在，可以塞Fifo但還沒塞
-    >0: User i 用`open`開好fifo，`open`的return值存在這裡， User j要拿的時候就從這裡拿
+    \>0: User i 用`open`開好fifo，`open`的return值存在這裡， User j要拿的時候就從這裡拿
     -2: User i block User j，不給傳送
     -3: 暫時狀態，User i 剛剛傳給User j，User j要馬上去用`open`把它收進來，不然User i會block
-    /*好像有爆開的風險欸幹，送東西跟開東西放在同一個地方，如果送很大的檔案會不會出事?*/
+    **好像有爆開的風險欸幹，送東西跟開東西放在同一個地方，如果送很大的檔案會不會出事?**
+    :::danger
+    From project2 demo
+    會出事是出在被block住，因為`manyblessings A >2`這種東西是END_COMMAND，可是要丟給其他人，不可以被block住，所以要多判斷如果有to_user_pipe就不用等
+    
+    可是還是有其他問題欸.. resource 不夠 error.. 這個不管它了 管他去死
+    :::
 
 5. `size_t user_idx_glob`
     用來記錄這個process是誰，為甚麼呢，因為收到signal時才知道是誰
