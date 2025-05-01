@@ -2,10 +2,11 @@
 
 using namespace std;
 
-int UserInfo_fd, MSG_fd, UserPipeMatrix_fd;
+int UserInfo_fd, MSG_fd, UserPipeMatrix_fd, Firewall_fd[MAX_CLIENT];
 struct UserInfo* UserInfo;
 char* msg;
 int *UserPipeMatrix;
+char* firewall[MAX_CLIENT];
 size_t user_idx_glob;
 
 int main(int argc, char* argv[]) {
@@ -75,6 +76,15 @@ void concurentConnectionOrientedServer(int port) {
     UserInfo_fd = shm_open("UserInfo", O_CREAT | O_RDWR, 0666);
     MSG_fd = shm_open("msg", O_CREAT | O_RDWR, 0666);
     UserPipeMatrix_fd = shm_open("UserPipeMatrix", O_CREAT | O_RDWR, 0666);
+    for (size_t i = 0; i < MAX_CLIENT; ++i) {
+        string shm_name = "firewall[" + to_string(i) + "]";
+        Firewall_fd[i] = shm_open(shm_name.c_str(), O_CREAT | O_RDWR, 0666);
+        if (Firewall_fd[i] == -1) {
+            cerr << "shmm_open error" << endl;
+            exit(1);
+        }
+    }
+    // Firewall_fd = shm_open("firewall", O_CREAT | O_RDWR, 0666);
     if (UserInfo_fd == -1 || MSG_fd == -1 || UserPipeMatrix_fd == -1) {
         cerr << "shmm_open error" << endl;
         exit(1);
@@ -83,11 +93,20 @@ void concurentConnectionOrientedServer(int port) {
     ftruncate(UserInfo_fd, MAX_CLIENT * sizeof(struct UserInfo));
     ftruncate(MSG_fd, MAX_COMMAND_SIZE);
     ftruncate(UserPipeMatrix_fd, MAX_CLIENT * MAX_CLIENT * sizeof(int));
+    for (size_t i = 0; i < MAX_CLIENT; ++i) {
+        ftruncate(Firewall_fd[i], INET_ADDRSTRLEN);
+    }
+    
     // map to memory
     UserInfo = (struct UserInfo *)mmap(0, MAX_CLIENT * sizeof(struct UserInfo), 
                                         PROT_READ | PROT_WRITE, MAP_SHARED, UserInfo_fd, 0);
     msg = (char *)mmap(0, MAX_COMMAND_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, MSG_fd, 0);
     UserPipeMatrix = (int *)mmap(0, MAX_CLIENT * MAX_CLIENT * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, UserPipeMatrix_fd, 0);
+    for (size_t i = 0; i < MAX_CLIENT; ++i) {
+        firewall[i] = (char *)mmap(0, INET_ADDRSTRLEN, PROT_READ | PROT_WRITE, MAP_SHARED, Firewall_fd[i], 0);
+        memset(firewall[i], '\0', INET_ADDRSTRLEN);
+    }
+    
     // init share memory
     for (size_t i = 0; i < MAX_CLIENT; ++i) {
         UserInfo[i].client_fd = -1;
@@ -99,6 +118,11 @@ void concurentConnectionOrientedServer(int port) {
 
     memset(msg, '\0', MAX_COMMAND_SIZE);
     memset(UserPipeMatrix, -1, MAX_CLIENT * MAX_CLIENT * sizeof(int));
+    /*
+    for (size_t i = 0; i < MAX_CLIENT; ++i) {
+        memset(firewall[i], '\0', INET_ADDRSTRLEN);
+    }
+    */
     // -2: block -1: unuse 0: enablue >0: keep fd from by open
 
     cout << "Server is listening on port:" << port << "..." << endl;
@@ -133,6 +157,19 @@ void concurentConnectionOrientedServer(int port) {
             while(UserInfo[user_idx].client_fd == -1) {
                 usleep(1000);
             }
+
+            for (size_t i = 0; i < MAX_CLIENT; ++i) {
+                if (strcmp(UserInfo[user_idx].IPAddress, firewall[i]) == 0) {
+                    cerr << "*** Error: You can not login. ***" << endl;
+                    UserInfo[user_idx].client_fd = -1;
+                    UserInfo[user_idx].pid = 0;
+                    UserInfo[user_idx].port = 0;
+                    memset(UserInfo[user_idx].IPAddress, '\0', INET_ADDRSTRLEN);
+                    memset(UserInfo[user_idx].UserName, '\0', NAME_SIZE);
+                    exit(0);
+                }
+            }
+            
 
             for (size_t i = 1; i < MAX_CLIENT; ++i) {
                 if (UserInfo[i].client_fd != -1) {
@@ -214,6 +251,10 @@ void release_share_memory(int signo) {
         munmap(UserInfo, MAX_CLIENT * sizeof(struct UserInfo));
         munmap(msg, MAX_COMMAND_SIZE);
         munmap(UserPipeMatrix, MAX_CLIENT * MAX_CLIENT * sizeof(int));
+        for (size_t i = 0; i < MAX_CLIENT; ++i) {
+            munmap(firewall[i], INET_ADDRSTRLEN);
+        }
+        
         exit(0);
     }
 }
@@ -337,7 +378,16 @@ int builtInCommand(Info info, const size_t user_idx) {
 
     // tell
     if (info.argv[0][0] == "tell") {
-        int receiver = stoi(info.argv[0][1]);
+        int receiver = -1;
+        for (size_t i = 0; i < MAX_CLIENT; ++i) {
+            if (UserInfo[i].UserName == info.argv[0][1]) {
+                receiver = (int)i;
+            }
+        }
+        if (receiver == -1) {
+            receiver = stoi(info.argv[0][1]);
+        }
+        
         if (UserInfo[receiver].client_fd == -1 || receiver >= MAX_CLIENT) {
             cerr << "*** Error: user #" << receiver << " does not exist yet. ***" << endl;
         }  else if (UserPipeMatrix[receiver * MAX_CLIENT + user_idx] == -2) {
@@ -404,7 +454,27 @@ int builtInCommand(Info info, const size_t user_idx) {
         }
         return 1;
     }
+
+    if (info.argv[0][0] == "firewall") {
+        for (size_t i = 0; i < MAX_CLIENT; ++i) {
+            if (strstr(firewall[i], ".") == NULL) {
+                strcpy(firewall[i], info.argv[0][1].c_str());
+                break;
+            }
+        }
+        return 1;
+    }
     
+    if (info.argv[0][0] == "unfirewall") {
+        for (size_t i = 0; i < MAX_CLIENT; ++i) {
+            if (strcmp(firewall[i], info.argv[0][1].c_str()) == 0) {
+                memset(firewall[i], '\0', INET_ADDRSTRLEN);
+                break;
+            }
+        }
+        return 1;
+    }
+
     return 0;
 }
 

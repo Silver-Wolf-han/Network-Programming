@@ -11,7 +11,6 @@
 #include <unistd.h>     // getcwd(), STDIN_FILENO, STDOUT_FILENO
 #include <pwd.h>        // getpwuid()
 #include <signal.h>     // signal()
-#include <string>
 #include <algorithm>    // find()
 #include <netinet/in.h> // **WAIT**
 #include <arpa/inet.h>  // **WAIT**

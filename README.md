@@ -136,3 +136,28 @@ return value   : void
 4. **等一秒**為什麼?連續broadcast的時候，後面的會把前面的給蓋掉
    (~~感覺比繫好的做法是分不同的msg用不同的記憶體，可是這樣先後順序呢?~~)
 
+## Demo
+抽到跟part 2一樣的 笑死
+
+偷看到另一題firewall (要花十多分鐘，只允許封鎖一個的版本)
+```
+% firewall 127.0.0.1
+
+                        $ telnet [server IP] [Server Port] #從127.0.0.1   
+                        *** Error: You can not login. ***
+                        $
+% who
+輸出
+# 不會看到剛剛嘗試登入的資訊   
+```
+
+還是把完整的自訂spec寫下來吧
+1. 已經在聊天室的某個人如果下`firewall 某IP`，則從`某IP`登入的人不能登入，輸出錯誤訊息
+2. 除了不能登入，聊天室內的其他人也不會知道這個使用者的存在(`who`，`tell`等command都不會送給他)
+3. 允許`firewall`多個IP
+4. 用`unfirewall 某IP`來將某個IP移除firewall，如果不再則輸出錯誤訊息
+
+**允許firewall多個IP** => 我只有想到開多個shm變數和fd(~~超爛~~)
+多兩個built-in function來處理這兩個共用記憶體的變數
+fd和變數都開成陣列，然後就登入`np_init()`前比較一下IP有沒有再被封鎖的名單當中
+
