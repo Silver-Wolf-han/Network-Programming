@@ -97,6 +97,8 @@ void singleProcessConcurrentServer(int port) {
 
     cout << "Server is listening on port:" << port << "..." << endl;
 
+    vector<string> firewall;
+
     while (true) {
         rset = all_fd_set;
 
@@ -137,43 +139,59 @@ void singleProcessConcurrentServer(int port) {
             User_Info_Map[(int)push_idx].totalCommandCount = 0;
             User_Info_Map[(int)push_idx].ignore_idx = 0;
 
-            // Enveriment Variable Init
-            clearenv();
-            for(auto env : User_Info_Map[(int)push_idx].EnvVar){
-                setenv(env.first.c_str(), env.second.c_str(), 1);
+            bool firewall_block = false;
+            for (size_t i = 0; i < firewall.size(); ++i) {
+                if (User_Info_Map[(int)push_idx].IPAddress == firewall[i]) {
+                    dup2Client(client_fd_table[(int)push_idx]);
+                    cout << "*** Error: You can not login. ***" << endl;
+                    close(client_fd_table[(int)push_idx]);
+                    FD_CLR(client_fd_table[(int)push_idx], &all_fd_set);
+                    client_fd_table[(int)push_idx] = -1;
+                    User_Info_Map.erase((int)push_idx);
+                    firewall_block = true;
+                    break;
+                }
             }
 
-            // Welcome Mesage
-            
-            dup2Client(client_fd_table[(int)push_idx]);
-            cout << "****************************************" << endl;
-            cout << "** Welcome to the information server. **" << endl;
-            cout << "****************************************" << endl;
-            string welmsg = "*** User '" + User_Info_Map[(int)push_idx].UserName + 
-                "' entered from " + User_Info_Map[(int)push_idx].IPAddress + 
-                ":" + to_string(User_Info_Map[(int)push_idx].port) + ". ***";
-            broadcast(welmsg, client_fd_table, User_Info_Map);
-            dup2Client(client_fd_table[(int)push_idx]);
-            typePrompt(false);
+            if (!firewall_block) {
+                // Enveriment Variable Init
+                clearenv();
+                for(auto env : User_Info_Map[(int)push_idx].EnvVar){
+                    setenv(env.first.c_str(), env.second.c_str(), 1);
+                }
 
-            // storge fd from accept (in FD_SET)
-            FD_SET(connect_fd, &all_fd_set);
+                // Welcome Mesage
 
-            // update fd num in history
-			if(connect_fd > max_fd_history) {
-                max_fd_history = connect_fd;
+                dup2Client(client_fd_table[(int)push_idx]);
+                cout << "****************************************" << endl;
+                cout << "** Welcome to the information server. **" << endl;
+                cout << "****************************************" << endl;
+                string welmsg = "*** User '" + User_Info_Map[(int)push_idx].UserName + 
+                    "' entered from " + User_Info_Map[(int)push_idx].IPAddress + 
+                    ":" + to_string(User_Info_Map[(int)push_idx].port) + ". ***";
+                broadcast(welmsg, client_fd_table, User_Info_Map);
+                dup2Client(client_fd_table[(int)push_idx]);
+                typePrompt(false);
+
+                // storge fd from accept (in FD_SET)
+                FD_SET(connect_fd, &all_fd_set);
+
+                // update fd num in history
+                if(connect_fd > max_fd_history) {
+                    max_fd_history = connect_fd;
+                }
+
+                // update current fd max
+                if(push_idx > max_fd_in_table) {
+                    max_fd_in_table = push_idx;
+                }
+
+                // if no one from accept then
+                if (select_reply_fd_count <= 0) {
+                    continue;
+                }
+                --select_reply_fd_count;
             }
-
-            // update current fd max
-			if(push_idx > max_fd_in_table) {
-                max_fd_in_table = push_idx;
-            }
-
-            // if no one from accept then
-            if (select_reply_fd_count <= 0) {
-                continue;
-            }
-            --select_reply_fd_count;
         }
 
         for (size_t i = 1; i <= max_fd_in_table; ++i) {
@@ -190,7 +208,7 @@ void singleProcessConcurrentServer(int port) {
                 dup2Client(client_fd_table[i]);
 
                 bool exit = false;
-                npshell_handle_one_line(User_Info_Map, i, &exit, client_fd_table);
+                npshell_handle_one_line(User_Info_Map, i, &exit, client_fd_table, firewall);
 
                 dup2(4, STDIN_FILENO);
                 dup2(5, STDOUT_FILENO);

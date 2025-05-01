@@ -337,3 +337,12 @@ Example
    1-3. 依照spec輸出對應的錯誤或加東西刪東西
 
 ２. 執行`command >n`之前先去`find(User_Info_Map[user_idx], n) == end?`看看有沒有block，有被block就當作錯誤處理
+
+
+Another demo part: `firewall IP` (reference project 3 README.rd)
+How?
+1. Add variable `vector<string> firewall` to record what ip in firewall list
+2. Add built-in command to deal with this variable
+3. when login, check the ip is or not in firewall list
+
+Bug: if it is been block, it will not exit right away, it would block until next command.

@@ -54,14 +54,14 @@ struct UserInfo {
 void npshellInit();
 void npshellLoop();
 void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, bool *exit, 
-                            const int* const client_fd_table);
+                            const int* const client_fd_table, vector<string>& firewall);
 void dup2Client(int fd);
 void broadcast(string msg, const int* const client_fd_table, const map<int, UserInfo> User_Info_Map);
 void sigchld_handler(int signo);
 void typePrompt(bool showPath);
 int builtInCommand(Info info);
 int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, const int user_idx, 
-                                const int* const client_fd_table);
+                                const int* const client_fd_table, vector<string>& firewall);
 int readCommand(Info &info, const int totalCommandCount);
 string ReConstructCommand(const Info info, const int currentCommandStart);
 void executeCommand(Info info, map<int, struct pipeStruct>& pipeMap, const int currentCommandStart,

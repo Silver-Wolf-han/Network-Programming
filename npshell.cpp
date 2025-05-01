@@ -133,7 +133,7 @@ int builtInCommand(Info info) {
 }
 
 void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_idx, 
-                            bool *exit, const int* const client_fd_table) {
+                            bool *exit, const int* const client_fd_table, vector<string>& firewall) {
 
     chdir("working_directory");
     
@@ -144,7 +144,7 @@ void npshell_handle_one_line(map<int, UserInfo>& User_Info_Map, const int user_i
         return;
     }
     
-    int builtInFlag = builtInCommand_com_handle(myInfo, User_Info_Map, user_idx, client_fd_table);
+    int builtInFlag = builtInCommand_com_handle(myInfo, User_Info_Map, user_idx, client_fd_table, firewall);
 
     int currentCommandStart = User_Info_Map[user_idx].totalCommandCount;
     User_Info_Map[user_idx].totalCommandCount += commandNum;
@@ -229,7 +229,7 @@ void typePrompt(bool showPath) {
 }
 
 int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, const int user_idx, 
-                            const int* const client_fd_table) {
+                            const int* const client_fd_table, vector<string>& firewall) {
 
     // empty line or not single command
     if (info.argv[0].empty() || info.argv.size() != 1) {
@@ -367,6 +367,27 @@ int builtInCommand_com_handle(Info info, map<int, UserInfo>& User_Info_Map, cons
             } else if (info.argv[0][0] == "unblock" && it != User_Info_Map[block_idx].who_block_me.end()) {
                 User_Info_Map[block_idx].who_block_me.erase(it);
             }
+        }
+        return 1;
+    }
+
+    if (info.argv[0][0] == "firewall") {
+        firewall.push_back(info.argv[0][1]);
+        return 1;
+    }
+
+    if (info.argv[0][0] == "unfirewall") {
+        int tar_idx = -1;
+        for (size_t i = 0; i < firewall.size(); ++i) {
+            if (firewall[i] == info.argv[0][1]) {
+                tar_idx = (int)i;
+                break;
+            }
+        }
+        if (tar_idx == -1) {
+            cout << "*** Error: IP " << info.argv[0][1] << " do not in firewall list. ***" << endl;
+        } else {
+            firewall.erase(firewall.begin() + tar_idx);
         }
         return 1;
     }
