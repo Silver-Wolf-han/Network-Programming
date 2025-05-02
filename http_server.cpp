@@ -41,6 +41,8 @@ private:
                     if (pid == 0) {
                         // 2. setenv
                         string request = string(data_);
+                        memset(data_, '\0', sizeof(data_));
+
                         vector<vector<string>> request_list = {{}};
                         size_t prev_start = 0;
                         for (size_t i = 0; i < request.size(); ++i) {
@@ -80,9 +82,10 @@ private:
                                     request_list[0][1].substr(0, question_mark);
 
                         for (auto pair: environment_list) {
-                            cout << pair.first << " " << pair.second << endl;
+                            setenv(pair.first.c_str(), pair.second.c_str(), 1);
+                            // cout << pair.first << " " << pair.second << endl;
                         }
-                        cout << "path " << cgi_path << endl;
+                        // cout << "path " << cgi_path << endl;
 
                         // 3. dup
                         
