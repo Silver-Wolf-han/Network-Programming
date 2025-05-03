@@ -27,9 +27,9 @@ private:
             boost::asio::buffer(data_, max_length),
             [this, self](boost::system::error_code ec, std::size_t length) {
                 if (!ec) {
-                    cout << "length:" << length << endl;
+                    // cout << "length:" << length << endl;
                     data_[length] = '\0';
-                    cout << endl << data_ << endl << flush;
+                    // cout << endl << data_ << endl << flush;
                     // do_write(length);
                     
                     
@@ -97,7 +97,7 @@ private:
                         if (environment_list["REQUEST_URI"] != "/panel.cgi") {
                             cout << "HTTP/1.1 403 Forbiden\r\n" << flush;
                         } else {
-                            cout << "HTTP/1.1 200 OK \r\n" << flush;
+                            cout << "HTTP/1.1 200 OK\r\n" << flush;
                             cout << "Server: http_server\r\n" << flush;
 
                             cgi_path = "." + cgi_path;
