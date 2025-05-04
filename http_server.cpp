@@ -12,9 +12,9 @@
 using boost::asio::ip::tcp;
 using namespace std;
 
-class session : public std::enable_shared_from_this<session> {
+class session : public enable_shared_from_this<session> {
 public:
-    session(tcp::socket socket) : socket_(std::move(socket)){}
+    session(tcp::socket socket) : socket_(move(socket)){}
 
     void start(){
         do_read();
@@ -25,7 +25,7 @@ private:
         auto self(shared_from_this());
         socket_.async_read_some(
             boost::asio::buffer(data_, max_length),
-            [this, self](boost::system::error_code ec, std::size_t length) {
+            [this, self](boost::system::error_code ec, size_t length) {
                 if (!ec) {
                     // cout << "length:" << length << endl;
                     data_[length] = '\0';
@@ -94,7 +94,7 @@ private:
                         dup2(socket_.native_handle(), STDERR_FILENO);
                         
                         // 4. exec
-                        if (environment_list["REQUEST_URI"] != "/panel.cgi") {
+                        if (environment_list["REQUEST_URI"].find(".cgi") == string::npos) {
                             cout << "HTTP/1.1 403 Forbiden\r\n" << flush;
                         } else {
                             cout << "HTTP/1.1 200 OK\r\n" << flush;
@@ -142,7 +142,7 @@ private:
         acceptor_.async_accept(
             [this](boost::system::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    std::make_shared<session>(std::move(socket))->start();
+                    make_shared<session>(move(socket))->start();
                 }
                 do_accept();
             }
@@ -155,17 +155,17 @@ private:
 int main(int argc, char* argv[]) {
     try {
         if (argc != 2) {
-            std::cerr << "Usage: http_server <port>\n";
+            cerr << "Usage: http_server <port>\n";
             return 1;
         }
 
         boost::asio::io_context io_context;
 
-        server s(io_context, std::atoi(argv[1]));
+        server s(io_context, atoi(argv[1]));
 
         io_context.run();
-    } catch (std::exception& e) {
-        std::cerr << "Exception: " << e.what() << "\n";
+    } catch (exception& e) {
+        cerr << "Exception: " << e.what() << "\n";
     }
 
     return 0;
