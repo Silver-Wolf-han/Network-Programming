@@ -103,9 +103,9 @@ private:
 
     void output(string msg, string type) {
         // html.escape
-        boost::replace_all(msg, "\n", "&NewLine;");
         boost::replace_all(msg, "&", "&amp;");
         boost::replace_all(msg, "\r", "");
+        boost::replace_all(msg, "\n", "&NewLine;");
         boost::replace_all(msg, "\'", "&apos;");
         boost::replace_all(msg, "\"", "&quot;");
         boost::replace_all(msg, "<", "&lt;");
@@ -142,17 +142,21 @@ int main(int argc, char* argv[]) {
         environment_list["REMOTE_ADDR"] = string(getenv("REMOTE_ADDR"));
         environment_list["REMOTE_PORT"] = string(getenv("REMOTE_PORT"));
 
+
         // query string parsing
         vector<string> each_query_string;
         size_t prev_start = 0;
         for (size_t i = 0; i < environment_list["QUERY_STRING"].size(); ++i) {
-            if (environment_list["QUERY_STRING"][i] == 'h') {
+            if (environment_list["QUERY_STRING"][i] == 'h' && i) {
                 each_query_string.push_back(environment_list["QUERY_STRING"].substr(prev_start, i - prev_start));
                 prev_start = i;
             }
         }
+        each_query_string.push_back(environment_list["QUERY_STRING"].substr(prev_start, environment_list["QUERY_STRING"].size() - prev_start));
 
         for (size_t i = 0; i < each_query_string.size(); ++i) {
+            // cout << "i:" << i << endl;
+            // cout << each_query_string[i] << endl;
             size_t h_start = 0, p_start = 0, f_start = 0;
             for (size_t j = 0; j < each_query_string[i].size(); ++j) {
                 switch(each_query_string[i][j]) {
@@ -169,17 +173,26 @@ int main(int argc, char* argv[]) {
                     break;
                 }
             }
+            /*
+            // for checkingg the parsing result, use stoi expection bug (remove the -1 in last)
+            cout << "h_start:" << h_start << endl;
+            cout << "p_start:" << p_start << endl;
+            cout << "f_start:" << f_start << endl;
+            cout << each_query_string[i].substr(h_start, p_start - 3 - h_start - 1) << endl;
+            cout << each_query_string[i].substr(p_start, f_start - 3 - p_start - 1) << endl;
+            cout << each_query_string[i].substr(f_start, each_query_string[i].size() - f_start - 1) << endl;
+            */
             int port_num;
-            string port_str = each_query_string[i].substr(p_start, f_start - 3 - p_start);
+            string port_str = each_query_string[i].substr(p_start, f_start - 3 - p_start - 1);
             if (port_str.empty()) {
                 port_num = -1;
             } else {
                 port_num = stoi(port_str);
             }
             UserInfoMap[i] = {
-                each_query_string[i].substr(h_start, p_start - 3 - h_start), 
+                each_query_string[i].substr(h_start, p_start - 3 - h_start - 1), 
                 port_num,
-                each_query_string[i].substr(p_start)
+                each_query_string[i].substr(f_start, each_query_string[i].size() - f_start - 1)
             };
 
         }
@@ -226,7 +239,9 @@ int main(int argc, char* argv[]) {
         cout << "    <thead>"                                                                                   << endl;
         cout << "        <tr>"                                                                                  << endl;
         for (auto user:UserInfoMap) {
-            cout << "<th scope=\"col\">" << user.second.host << ":" << user.second.port << "</th>"              << endl;
+            if (user.second.port != -1) {
+                cout << "<th scope=\"col\">" << user.second.host << ":" << user.second.port << "</th>"          << endl;
+            }
         }
                 //<th scope="col">nplinux1.cs.nycu.edu.tw:1234</th>
                 //<th scope="col">nplinux2.cs.nycu.edu.tw:5678</th>
@@ -235,7 +250,9 @@ int main(int argc, char* argv[]) {
         cout << "    <tbody>"                                                                                   << endl;
         cout << "        <tr>"                                                                                  << endl;
         for (auto user:UserInfoMap) {
-            cout << "<td><pre id=\"s" << user.first << "\" class=\"mb-" << user.first << "\"></pre></td>"       << endl;
+            if (user.second.port != -1) {
+                cout << "<td><pre id=\"s" << user.first << "\" class=\"mb-" << user.first << "\"></pre></td>"   << endl;
+            }
         }
                 //<td><pre id="s0" class="mb-0"></pre></td>
                 //<td><pre id="s1" class="mb-0"></pre></td>
