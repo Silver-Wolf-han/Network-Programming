@@ -15,17 +15,17 @@
 using boost::asio::ip::tcp;
 using namespace std;
 
-struct UserInfo{
+struct UserInfo {
     string host;
     int port;
     string fileName;
 };
 
-class shellClient : public enable_shared_from_this<shellClient>{
+class Clinet : public enable_shared_from_this<Clinet> {
 public:
-    shellClient(tcp::socket &socket, map<size_t, UserInfo> UserInfoMap, boost::asio::io_context& io_context, size_t index) : outSocket_(socket), UserInfoMap(UserInfoMap), resolver_(io_context), socket_(io_context), index_(index){}
+Clinet(tcp::socket &socket, map<size_t, UserInfo> UserInfoMap, boost::asio::io_context& io_context, size_t index) : outSocket_(socket), UserInfoMap(UserInfoMap), resolver_(io_context), socket_(io_context), index_(index) {}
 
-    void start(){
+    void start() {
         do_resolve();
     }
 
@@ -34,7 +34,7 @@ private:
         auto self(shared_from_this());
         resolver_.async_resolve(
             UserInfoMap[index_].host, to_string(UserInfoMap[index_].port), [this, self](boost::system::error_code ec, tcp::resolver::results_type result) {
-                if(!ec) {
+                if (!ec) {
                     memset(data_, '\0', sizeof(data_));
                     endpoint_ = result;
                     do_connect();
@@ -63,7 +63,7 @@ private:
         );
     }
 
-    void do_read(){
+    void do_read() {
         auto self(shared_from_this());
         socket_.async_read_some(
             boost::asio::buffer(data_, max_length),  [this, self](boost::system::error_code ec, size_t length) {
@@ -72,7 +72,7 @@ private:
                     string msg = string(data_);
                     memset(data_, '\0', sizeof(data_));
                     output(msg, "result");
-                    if(msg.find("% ") == string::npos) {
+                    if (msg.find("% ") == string::npos) {
                         do_read();
                     } else {
                         do_write();
@@ -125,8 +125,8 @@ private:
     char data_[max_length];
 };
 
-void console(tcp::socket &socket_, map<string, string> &env){
-    try{
+void console(tcp::socket &socket_, map<string, string> &env) {
+    try {
         map<size_t, UserInfo> UserInfoMap;
 
         vector<string> each_query_string;
@@ -239,12 +239,12 @@ void console(tcp::socket &socket_, map<string, string> &env){
         boost::asio::write(socket_, boost::asio::buffer(console_context));
 
         boost::asio::io_context io_context;
-        for(size_t i = 0; i < UserInfoMap.size(); i++){
-            make_shared<shellClient>(socket_ ,UserInfoMap, io_context, i)->start();
+        for (size_t i = 0; i < UserInfoMap.size(); i++) {
+            make_shared<Clinet>(socket_ ,UserInfoMap, io_context, i)->start();
         }
         io_context.run();
         socket_.close();
-    }catch (exception& e){
+    } catch (exception& e) {
         cerr << "Exception: " << e.what() << "\n";
     }
 }
@@ -475,23 +475,22 @@ string panel_cgi() {
     
 }
 
-class session : public enable_shared_from_this<session>{
+class session : public enable_shared_from_this<session> {
 public:
-    session(tcp::socket socket) : socket_(move(socket)){}
+    session(tcp::socket socket) : socket_(move(socket)) {}
 
-    void start(){
+    void start() {
         do_read();
     }
 
 private:
-    void do_read(){
+    void do_read() {
         auto self(shared_from_this());
         socket_.async_read_some(
             boost::asio::buffer(data_, max_length), 
-            [this, self](boost::system::error_code ec, size_t length){
-                if (!ec){
+            [this, self](boost::system::error_code ec, size_t length) {
+                if (!ec) {
                     data_[length] = '\0';
-                    string header = "HTTP/1.1 200 OK\r\nServer: http_server\r\nContent-type: text/html\r\n\r\n";
 
                     string request = string(data_);
                     memset(data_, '\0', sizeof(data_));
@@ -527,11 +526,8 @@ private:
                                 (space == -1 ? request_list[0][1]:request_list[0][1].substr(0, space)) :
                                 request_list[0][1].substr(0, question_mark);
                     
-                    
                     if (env["REQUEST_URI"].find(".cgi") == string::npos) {
-                        // request_reply = "HTTP/1.1 403 Forbiden\r\n";
                         do_write("HTTP/1.1 403 Forbiden\r\n");
-                        // cout << "HTTP/1.1 403 Forbiden\r\n" << flush;
                     } else if (path == "/panel.cgi") {
                         do_write("HTTP/1.1 200 OK\r\nServer: http_server\r\nContent-type: text/html\r\n\r\n");
                         do_write(panel_cgi());
@@ -549,7 +545,7 @@ private:
         );
     }
     
-    void do_write(string out){
+    void do_write(string out) {
         auto self(shared_from_this());
         boost::asio::async_write(
             socket_, boost::asio::buffer(out, out.size()), [this, self](boost::system::error_code ec, size_t length) {}

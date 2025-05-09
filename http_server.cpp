@@ -14,9 +14,9 @@ using namespace std;
 
 class session : public enable_shared_from_this<session> {
 public:
-    session(tcp::socket socket) : socket_(move(socket)){}
+    session(tcp::socket socket) : socket_(move(socket)) {}
 
-    void start(){
+    void start() {
         do_read();
     }
 
@@ -24,14 +24,9 @@ private:
     void do_read() {
         auto self(shared_from_this());
         socket_.async_read_some(
-            boost::asio::buffer(data_, max_length),
-            [this, self](boost::system::error_code ec, size_t length) {
+            boost::asio::buffer(data_, max_length), [this, self](boost::system::error_code ec, size_t length) {
                 if (!ec) {
-                    // cout << "length:" << length << endl;
                     data_[length] = '\0';
-                    // cout << endl << data_ << endl << flush;
-                    // do_write(length);
-                    
                     
                     while(waitpid(-1, NULL, WNOHANG) > 0);
 
@@ -58,14 +53,7 @@ private:
                         }
 
                         request_list.erase(request_list.begin() + request_list.size() - 1);
-                        /*
-                        for (size_t i = 0; i < request_list.size(); ++i) {
-                            for (size_t j = 0; j < request_list[i].size(); ++j) {
-                                cout << "i:" << i << " j:" << j << endl;
-                                cout << request_list[i][j] << endl;
-                            }
-                        }
-                        */
+
                         // 2-1. fill environment list
                         int space = request_list[0][1].find(' '), question_mark = request_list[0][1].find('?');
                         environment_list["REQUEST_METHOD"] = request_list[0][0];
@@ -83,9 +71,7 @@ private:
 
                         for (auto pair: environment_list) {
                             setenv(pair.first.c_str(), pair.second.c_str(), 1);
-                            // cout << pair.first << " " << pair.second << endl;
                         }
-                        // cout << "path " << cgi_path << endl;
 
                         // 3. dup
                         
