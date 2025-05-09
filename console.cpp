@@ -38,7 +38,6 @@ private:
         resolver_.async_resolve(
             UserInfoMap[index_].host, to_string(UserInfoMap[index_].port), [this, self](boost::system::error_code ec, tcp::resolver::results_type result) {
                 if (!ec) {
-                    memset(data_, '\0', sizeof(data_));
                     endpoint_ = result;
                     do_connect();
                 } else {
@@ -52,12 +51,8 @@ private:
         auto self(shared_from_this());
         boost::asio::async_connect(
             socket_, endpoint_, [this, self](boost::system::error_code ec, tcp::endpoint ed) {
-                if (!ec) {
-                    memset(data_, '\0', sizeof(data_));
-                    in.open("./test_case/" + UserInfoMap[index_].fileName);
-                    if (!in.is_open()) {
-                        socket_.close();
-                    }
+                in.open("./test_case/" + UserInfoMap[index_].fileName);
+                if (!ec || !in.is_open()) {
                     do_read();
                 } else {
                     socket_.close();
@@ -141,7 +136,6 @@ int main(int argc, char* argv[]) {
         environment_list["SERVER_PORT"] = string(getenv("SERVER_PORT"));
         environment_list["REMOTE_ADDR"] = string(getenv("REMOTE_ADDR"));
         environment_list["REMOTE_PORT"] = string(getenv("REMOTE_PORT"));
-
 
         // query string parsing
         vector<string> each_query_string;

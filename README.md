@@ -207,3 +207,19 @@ boost::asio::write(socket_, boost::assio::buffer(data))
 
 ## Demo
 等之後再說
+```=cpp
+/*
+if (output_msg.find("% ") == string::npos) {
+    do_read();
+} else {
+    // Delay 1 second before calling do_write()
+    auto timer = std::make_shared<boost::asio::steady_timer>(socket_.get_executor(), std::chrono::seconds(1));
+    auto self = shared_from_this();
+    timer->async_wait([this, self, timer](const boost::system::error_code& ec) {
+        if (!ec) {
+            do_write();
+        }
+    });
+}
+*/
+```

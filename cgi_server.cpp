@@ -35,7 +35,6 @@ private:
         resolver_.async_resolve(
             UserInfoMap[index_].host, to_string(UserInfoMap[index_].port), [this, self](boost::system::error_code ec, tcp::resolver::results_type result) {
                 if (!ec) {
-                    memset(data_, '\0', sizeof(data_));
                     endpoint_ = result;
                     do_connect();
                 } else {
@@ -49,12 +48,8 @@ private:
         auto self(shared_from_this());
         boost::asio::async_connect(
             socket_, endpoint_, [this, self](boost::system::error_code ec, tcp::endpoint ed) {
-                if (!ec) {
-                    memset(data_, '\0', sizeof(data_));
-                    in_.open("./test_case/" + UserInfoMap[index_].fileName);
-                    if (!in_.is_open()) {
-                        socket_.close();
-                    }
+                in_.open("./test_case/" + UserInfoMap[index_].fileName);
+                if (!ec || !in_.is_open()) {
                     do_read();
                 } else {
                     socket_.close();
@@ -70,7 +65,6 @@ private:
                 if (!ec && length) {
                     data_[length] = '\0';
                     string msg = string(data_);
-                    memset(data_, '\0', sizeof(data_));
                     output(msg, "result");
                     if (msg.find("% ") == string::npos) {
                         do_read();
@@ -491,10 +485,7 @@ private:
             [this, self](boost::system::error_code ec, size_t length) {
                 if (!ec) {
                     data_[length] = '\0';
-
                     string request = string(data_);
-                    memset(data_, '\0', sizeof(data_));
-
                     vector<vector<string>> request_list = {{}};
                     size_t prev_start = 0;
                     for (size_t i = 0; i < request.size(); ++i) {

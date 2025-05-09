@@ -36,8 +36,6 @@ private:
                     if (pid == 0) {
                         // 2. setenv
                         string request = string(data_);
-                        memset(data_, '\0', sizeof(data_));
-
                         vector<vector<string>> request_list = {{}};
                         size_t prev_start = 0;
                         for (size_t i = 0; i < request.size(); ++i) {
