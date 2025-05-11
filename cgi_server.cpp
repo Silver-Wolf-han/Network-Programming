@@ -23,41 +23,31 @@ struct UserInfo {
 
 class Clinet : public enable_shared_from_this<Clinet> {
 public:
-Clinet(tcp::socket &socket, map<size_t, UserInfo> UserInfoMap, boost::asio::io_context& io_context, size_t index) : outSocket_(socket), UserInfoMap(UserInfoMap), resolver_(io_context), socket_(io_context), index_(index) {}
+    Clinet(tcp::socket &socket, map<size_t, UserInfo> UserInfoMap, boost::asio::io_context& io_context, size_t index) : outSocket_(socket), UserInfoMap(UserInfoMap), resolver_(io_context), socket_(io_context), index_(index) {}
 
     void start() {
-        do_resolve();
+        auto self(shared_from_this());
+        resolver_.async_resolve(
+            UserInfoMap[index_].host, to_string(UserInfoMap[index_].port), [this, self](boost::system::error_code ec, tcp::resolver::results_type endpoint_) {
+                if (!ec) {
+                    boost::asio::async_connect(
+                        socket_, endpoint_, [this, self](boost::system::error_code ec, tcp::endpoint ed) {
+                            in_.open("./test_case/" + UserInfoMap[index_].fileName);
+                            if (!ec || !in_.is_open()) {
+                                do_read();
+                            } else {
+                                socket_.close();
+                            }
+                        }
+                    );
+                } else {
+                    socket_.close();
+                }
+            }
+        );
     }
 
 private:
-    void do_resolve() {
-        auto self(shared_from_this());
-        resolver_.async_resolve(
-            UserInfoMap[index_].host, to_string(UserInfoMap[index_].port), [this, self](boost::system::error_code ec, tcp::resolver::results_type result) {
-                if (!ec) {
-                    endpoint_ = result;
-                    do_connect();
-                } else {
-                    socket_.close();
-                }
-            }
-        );
-    }
-    
-    void do_connect() {
-        auto self(shared_from_this());
-        boost::asio::async_connect(
-            socket_, endpoint_, [this, self](boost::system::error_code ec, tcp::endpoint ed) {
-                in_.open("./test_case/" + UserInfoMap[index_].fileName);
-                if (!ec || !in_.is_open()) {
-                    do_read();
-                } else {
-                    socket_.close();
-                }
-            }
-        );
-    }
-
     void do_read() {
         auto self(shared_from_this());
         socket_.async_read_some(
@@ -113,7 +103,6 @@ private:
     tcp::resolver resolver_;
     tcp::socket socket_;
     size_t index_;
-    tcp::resolver::results_type endpoint_;
     ifstream in_;
     enum { max_length = 40960 };
     char data_[max_length];

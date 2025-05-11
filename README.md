@@ -96,6 +96,7 @@ Boost Function Note:
 ```=cpp
 class Client : public enable_shared_from_this<Client> {}
 ```
+I have merge following two function into `start()` function
 1. `do_resolve()` : 把 domain name 轉成 IP [Boost](https://live.boost.org/doc/libs/1_37_0/doc/html/boost_asio/reference/ip__basic_resolver/async_resolve/overload1.html)
     ```=cpp
     void do_resolve() {

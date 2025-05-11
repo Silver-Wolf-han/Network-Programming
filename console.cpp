@@ -29,38 +29,28 @@ public:
     Client(boost::asio::io_context& io_context, size_t i) : socket_(io_context), resolver_(io_context), index_(i) {}
 
     void start() {
-        do_resolve();
+        auto self(shared_from_this());
+        resolver_.async_resolve(
+            UserInfoMap[index_].host, to_string(UserInfoMap[index_].port), [this, self](boost::system::error_code ec, tcp::resolver::results_type endpoint_) {
+                if (!ec) {
+                    boost::asio::async_connect(
+                        socket_, endpoint_, [this, self](boost::system::error_code ec, tcp::endpoint ed) {
+                            in.open("./test_case/" + UserInfoMap[index_].fileName);
+                            if (!ec || !in.is_open()) {
+                                do_read();
+                            } else {
+                                socket_.close();
+                            }
+                        }
+                    );
+                } else {
+                    socket_.close();
+                }
+            }
+        );
     }
 
 private:
-    void do_resolve() {
-        auto self(shared_from_this());
-        resolver_.async_resolve(
-            UserInfoMap[index_].host, to_string(UserInfoMap[index_].port), [this, self](boost::system::error_code ec, tcp::resolver::results_type result) {
-                if (!ec) {
-                    endpoint_ = result;
-                    do_connect();
-                } else {
-                    socket_.close();
-                }
-            }
-        );
-    }
-
-    void do_connect() {
-        auto self(shared_from_this());
-        boost::asio::async_connect(
-            socket_, endpoint_, [this, self](boost::system::error_code ec, tcp::endpoint ed) {
-                in.open("./test_case/" + UserInfoMap[index_].fileName);
-                if (!ec || !in.is_open()) {
-                    do_read();
-                } else {
-                    socket_.close();
-                }
-            }
-        );
-    }
-
     void do_read() {
         auto self(shared_from_this());
         socket_.async_read_some(
@@ -112,7 +102,6 @@ private:
 
     tcp::socket socket_;
     tcp::resolver resolver_;
-    tcp::resolver::results_type endpoint_;
     size_t index_;
     ifstream in;
     
