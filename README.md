@@ -96,7 +96,6 @@ Boost Function Note:
 ```=cpp
 class Client : public enable_shared_from_this<Client> {}
 ```
-I have merge following two function into `start()` function
 1. `do_resolve()` : 把 domain name 轉成 IP [Boost](https://live.boost.org/doc/libs/1_37_0/doc/html/boost_asio/reference/ip__basic_resolver/async_resolve/overload1.html)
     ```=cpp
     void do_resolve() {
@@ -206,21 +205,49 @@ boost::asio::write(socket_, boost::assio::buffer(data))
 #### class Client
 和`console.cpp` 大致一樣， 最大差別就是輸出一樣不是用cout了
 
+## 問答
+恩對阿 問答12%三題 然後有一題答不出來..
+1. 問我`http_server`裡面`main`有一個`boost::asio::io_context io_context`是幹什麼用的..?
+    (~~幹這從`echo_server`裡面貼過來的誰知道是什麼~~)就是處理跟OS互動用的東西啦，怎麼可能整個網路沒有用到OS，阿全部丟給這個處理?
+
+2. 問我boost::..什麼function後面的`handler`是什麼時候執行 (~~其實我不知道他在問什麼~~)
+    反正我就說 就call他的function跑完之後會來執行阿 (但助教好像不滿意) 我就說 阿會有error_code (助教好像聽到這個詞就滿意了?)
+
+3. 問我怎麼把Host Name轉IP?
+    就asyc_resolve，裡面幹嘛的 就 DNS (Domain Name System)
+
 ## Demo
-等之後再說
+(從網路上查到的題目:用`async_wait`來讓command都延遲一秒傳送，靠GPT才寫出來，查API根本看不懂)
+第三題 Delayed Command (CGI)
 ```=cpp
-/*
 if (output_msg.find("% ") == string::npos) {
     do_read();
 } else {
     // Delay 1 second before calling do_write()
-    auto timer = std::make_shared<boost::asio::steady_timer>(socket_.get_executor(), std::chrono::seconds(1));
-    auto self = shared_from_this();
-    timer->async_wait([this, self, timer](const boost::system::error_code& ec) {
-        if (!ec) {
-            do_write();
+    auto timer = make_shared<boost::asio::steady_time>(socket_.get_executor(), std::chrono::seconds(1));
+    timer->async_waint(
+        [this, self, time](const boost::system::error_code& ec) {
+            if (!ec) {
+                do_write();
+            }
         }
-    });
+    );
 }
-*/
 ```
+
+應該是第四題
+(從吳信葆學長貼到的:如果`boost::system::error_code& ec`可能有錯的情況)
+呃 應該 就 輸出他要的格式? 我也不知道題目是什麼?
+
+
+(偷看到前面的題目:如果REQUEST不是`panel.cgi`的話就回傳403)
+第一題
+只接受`/panel.cgi`的request，其他request則回傳`HTTP1.1 403 Forbidden`
+我參考的考古是這樣(欸是說這樣會讓第二部分轉`console.cgi`爆開吧 害我以為考古有問題)
+在`http_server.cpp`裡面`exec`的步驟，多判斷一個REQUEST_URI裡面沒有`console.cgi`就輸出(STDOUT) `HTTP/1.1 403 Forbiden\r\n` 回去
+
+我抽到的:
+第二題
+console.cgi的每一個seesion在收到第一個shell prompt(%)後，自動送出who指令到網頁和np_single_golden
+`console.cpp`裡面`class Client`裡面多加一個`bool isFirst(true)`
+接著在`do_write()`裡面，如果是第一次就直接把`input_cmd`改成`who\n`(要加`\n`)然後把`isFirst`改成`false`

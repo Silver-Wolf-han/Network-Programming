@@ -26,7 +26,7 @@ map<size_t, UserInfo> UserInfoMap;
 
 class Client : public enable_shared_from_this<Client> {
 public:
-    Client(boost::asio::io_context& io_context, size_t i) : socket_(io_context), resolver_(io_context), index_(i) {}
+    Client(boost::asio::io_context& io_context, size_t i) : socket_(io_context), resolver_(io_context), index_(i), isFirst(true) {}
 
     void start() {
         auto self(shared_from_this());
@@ -74,9 +74,15 @@ private:
     void do_write() {
         auto self(shared_from_this());
         string input_cmd;
-        getline(in, input_cmd);
-        input_cmd += '\n';
+        if (!isFirst) {
+            getline(in, input_cmd);
+            input_cmd += '\n';
+        } else {
+            input_cmd = "who\n";
+            isFirst = false;
+        }
         output(input_cmd, "command");
+        
         boost::asio::async_write(
             socket_, boost::asio::buffer(input_cmd, input_cmd.size()), [this, self](boost::system::error_code ec, size_t) {
                 if (!ec) {
@@ -103,6 +109,7 @@ private:
     tcp::socket socket_;
     tcp::resolver resolver_;
     size_t index_;
+    bool isFirst;
     ifstream in;
     
     enum { max_length = 1024 };
