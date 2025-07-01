@@ -12,15 +12,34 @@
 using boost::asio::ip::tcp;
 using namespace std;
 
+boost::asio::io_context io_context;
+
 class session : public enable_shared_from_this<session> {
 public:
     session(tcp::socket socket) : socket_(move(socket)) {}
 
     void start() {
-        do_read();
+        get_socks_requset();
     }
 
 private:
+    void get_socks_requset() {
+        auto self(shared_from_this());
+        socket_.async_read_some(
+            boost::asio::buffer(data_, max_length), [this, self](boost::system::error_code ec, size_t length) {
+                if (!ec) {
+                    int VN = data_[0];
+                    int CD = data_[1];
+                    int DSTPORT = ((int)(data_[2])) * 256 + ((int)(data_[3]));
+                    string DSTIP = to_string(static_cast<int>(data_[4])) + "." + to_string(static_cast<int>(data_[5])) + "." + to_string(static_cast<int>(data_[6])) + "." + to_string(static_cast<int>(data_[7]));
+                    cout << VN << endl;
+                    cout << CD << endl;
+                    cout << DSTPORT << endl;
+                    cout << DSTIP << endl;
+                }
+            }
+        );
+    }
     void do_read() {
         auto self(shared_from_this());
         socket_.async_read_some(
@@ -118,6 +137,7 @@ private:
 class server {
 public:
     server(boost::asio::io_context& io_context, short port) : acceptor_(io_context, tcp::endpoint(tcp::v4(), port)) {
+        acceptor_.set_option(boost::asio::socket_base::reuse_address(true));
         do_accept();
     }
 
@@ -126,7 +146,17 @@ private:
         acceptor_.async_accept(
             [this](boost::system::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    make_shared<session>(move(socket))->start();
+                    io_context.notify_fork(boost::asio::io_context::fork_prepare);
+                    pid_t pid = fork();
+
+                    if (pid == 0) {
+                        io_context.notify_fork(boost::asio::io_context::fork_child);
+                        make_shared<session>(move(socket))->start();
+                    } else {
+                        io_context.notify_fork(boost::asio::io_context::fork_parent);
+                        while (waitpid(-1, NULL, WNOHANG) > 0);
+                        socket.close();
+                    }
                 }
                 do_accept();
             }
@@ -139,11 +169,11 @@ private:
 int main(int argc, char* argv[]) {
     try {
         if (argc != 2) {
-            cerr << "Usage: http_server <port>\n";
+            cerr << "Usage: socks_server <port>\n";
             return 1;
         }
 
-        boost::asio::io_context io_context;
+        
 
         server s(io_context, atoi(argv[1]));
 
