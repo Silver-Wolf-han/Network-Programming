@@ -12,13 +12,13 @@ struct pipeStruct {
 }
 ```
 :::info
-以每個command的輸入創造pipe
+Create a pipe for each command’s input
 :::
-紀錄每個pipe的狀況
-1. OutCommandIndex: 記錄輸出到哪個Command
-2. fd[2]: 儲存pipe
-3. relate_pids: 哪些process和這個pipe的輸入有關
-4. startCommandType: 調整number pipe與oridary pipe順序
+Record the status of each pipe
+1. `OutCommandIndex`: Records which command this pipe outputs to
+2. `fd[2]`: Stores the pipe
+3. `relate_pids`: Which processes are related to this pipe’s input
+4. `startCommandType`: Adjusts the order between number pipes and ordinary pipes
 
 ### Info
 ```=cpp
@@ -29,9 +29,9 @@ struct Info{
     vector<vector<string>> argv;
 }
 ```
-記錄每次輸入的Input Command以及這些Command的執行順序
-1. bg: 是否背景執行
-2. op: 每個command的pipe種類
+Stores the input commands and their execution order
+1. `bg`: Whether to run in background
+2. `op`: Pipe type of each command
     ```=hpp
     END_OF_COMMAND : 0
     PIPE           : 1
@@ -39,13 +39,13 @@ struct Info{
     NUM_PIPE_ERR   : 3
     OUT_RD         : 4
     ```
-4. opOrder: 每個command應該pipe到哪個command
+3. `opOrder`: Which command each command should pipe to
     ```=hpp
     NOT_PIPE        : 0
     NOT_NUMBER_PIPE : 1
     other(some n>0) : pipe to which command (n-th)
     ```
-6. argv: command內容, 一個command存在一個`vector<string>`
+4. `argv`: Command content, each command is stored as a `vector<string>`
 
 For example, Input command
 `% commandA -flagA | commandB |3 commandC -flagC > file`
@@ -68,16 +68,16 @@ void sigchld_handler(int signo) {
     while(waitpid(-1, NULL, WNOHANG) > 0);
 }
 ```
-註冊一個function來處理當process收到SIGCHLD signal。
-透過flag`WNOHANG`來避免blocking，如果沒有child要結束就離開。
+Registers a function to handle SIGCHLD signal when a process terminates.
+ses `WNOHANG` flag to avoid blocking—returns immediately if no child is to be waited on.
 
 ### typePrompt
 ```=cpp
 input argument : showPath(bool)
 return type    : void
 ```
-顯示shell當中command line開始符號
-傳入參數決定是否host name及current working directory
+Displays the shell prompt symbol.
+Argument decides whether to show host name and current working directory.
 
 ### readCommand
 ```=cpp
@@ -85,25 +85,24 @@ input argument : &info (struct Info) /* by reference*/
                  totalCommandCount (const int)
 return type    : int
 ```
-處理輸入argument並存到info當中
-return總共有讀到多少commnad (output redirection記錄為1個)
+Parses input arguments and stores them into `info`.
+Returns how many commands were read (output redirection also counts as one).
 
-過程處理Number Pipe與Ordiray pipe的counter問題-單行
+Handles number pipe and ordinary pipe counter issues — single line
 ```=bash
 % removetag test.html |2 removetag  test.html | number
 % number
 ```
-需要將第一個`removetag` command pipe給下一行的`number`
-處理方式：每次讀取到`'|'` (`op = PIPE`)就判斷同一行的的numbered pipe (`op = NUM_PIPE`)是否超過目前的ordiray pipe
+`removetag` in beginning must pipe to `number` on the next line.
+Approach: On reading `'|'` (`op = PIPE`), check if there is a numbered pipe (`op = NUM_PIPE`) on the same line that exceeds the current ordinary pipe count.
 
 ### builtInComand
 ```=cpp
 input argument : info (struct Info)
 return type    : int
 ```
-判斷是否built-in function(`printenv, setenv, exit, cd`)，是則執行
-return是否為built-in function, `exit` return `-1`
-
+Checks whether the command is a built-in (`printenv`, `setenv`, `exit`, `cd`), and executes if so.
+Returns whether it was a built-in; `exit` returns `-1`.
 
 ### executeCommand
 ```=cpp
@@ -113,55 +112,55 @@ input argument : info (pipeStruct)
                  totalCommandCount   (const int)
 return type    : void
 ```
-透過info執行command
+Executes the command using `info`.
  
-針對每個command:
-1. 維護pipeMap
-    如果該command pipe目標尚未創立接收的pipe，則創立pipe
+For each command:
+1. Maintain `pipeMap`:
+    If the target pipe (output to current command) doesn't exist yet, create it.
 
 2. `fork()`
-   2-1. child process:連接pipe後執行command
-   > 1. 如果連接至該pipe存在，則連接pipe(不存在表示存STDIN輸入)
-   > 2. 判斷command輸出哪個 pipe 或 file 或 STDOUT 
-   > 3. 用execvp執行command
+   2-1. child process: deal the pipe and executes the command
+   > 1. dup2 pipe-out (output to current command) if it exists (else use `STDIN`)
+   > 2. Determine if output goes to pipe, file, or `STDOUT`
+   > 3. Use `execvp` to execute
        
-   2-2. parent process:關閉pipe後等待child process 
-   > 1. 收集相關的process pid
-   > 2. 關閉相關的pipe
-   > 3. 如果目前command是輸出到file or STDOUT，則等待相關的process執行
-   > 4. 不是輸出到file or STDOUT可以先偷跑，大量資料可能被block住
+   2-2. parent process: Closes pipe and waits
+   > 1. Collects related process PIDs
+   > 2. Closes related pipes
+   > 3. If output is to file or STDOUT, wait for process
+   > 4. Else, it can run ahead (large outputs may block)
 
 3. `while (waitpid(-1, &status, WNOHANG)>0);`
-    結束所有zombie processes
+    Terminates all zombie processes
 
 ### main function
-1. 設定環境變數 PATH="bin:."
-2. print prompt
-3. readCommand and get #com
+1. Set environment variable `PATH="bin:."`
+2. print prompt `%`
+3. call `readCommand` and get #commands
 4. update counter
-5. 過程處理Number Pipe與Ordiray pipe的counter問題-多行
+5. Handle number vs ordinary pipe counter issues — multi-line
     ```=bash
     % removetag test.html |2
     % removetag test.html | number
     % number
     ```
-    需要將第一個`removetag` command pipe給第三行的`number`
-    處理方式：在執行下一個command之前，先掃描該行當中是否有Ordiray pipe(`'|'`)
-    如果有的話，則檢查pipe input type是否為Number Pipe且是否超過目前執行行數
-    若以上條件皆成立，則需要調整該條pipe的output至下一個(直接使用新的pipeMap來取代)
-6. 若built-in command為`exit`，則跳至第九步
-7. executecommand
-8. 回到step 2
-9. 結束
+    `removetag` in beginning in beginning `number`.
+    Approach: Before executing the next command, check whether the line includes an ordinary pipe (`'|'`).
+    If so, check whether the input pipe type is a number pipe and if it exceeds the current execution line.
+    If both true, redirect output of that pipe to next command (use new `pipeMap`).
+6. If built-in command is `exit`, go to step 9
+7. call `executecommand`
+8. Return to step 2
+9. Exit
 
 ### demo part
-八題抽一題
+Choose one of eight questions
 
-第六題 Ignore N line command (`%N`)
+Question 6: Ignore N line command (`%N`)
 ```=bash
 % ls |5
 % ls |2
-% ls %2            # ignore 接下來兩行，目前的結果直接輸出
+% ls %2            # ignore next 2 lines, output result now  
 bin
 test.html
 % cat              # ignore
@@ -175,18 +174,18 @@ test.html
     2 test.html
 % exit
 ```
-~~當初Demo我寫的是錯的，我把`ls |5`丟給cat，結果是一樣~~
-1. op選項當中多加一個`IGNORE:5`
-2. 讀到`%`的時候`info.op=IGNORE`, `info.opOrder=`後面的數字
-3. `pipeMap`要跟著`IGNORE`往後推移 (和多行pipe補救放在一起) ~~demo時忘記做~~
+~~Originally my demo was wrong—I piped `ls |5` to `cat`, but result was same.~~
+1. Add `IGNORE:5` to `op` options
+2. On reading `%`, `info.op=IGNORE`, `info.opOrder=` number after `%`
+3. `pipeMap` must be pushed with `IGNORE` (handled with multi-line pipe fix) ~~and I forgot it in demo~~
    :::warning
-   `ignore_idx++`這裡要記得**符合條件時:在要Ignore的期間**把要忽略的行數也要往後移動(`command A | command B`只算一個command)
-   單行那邊不用補就是因為`command %N`, command會直接輸出，後面不會再接pipe
+   At `ignore_idx++`, **when condition is met, i.e., during ignore period**, move ignore count forward as well. since `command A | command B` counts as 1 command)
+   Single line doesn’t need this fix because `command %N` outputs directly and doesn’t connect to pipe.
    :::
-4. 目前的`command index <= ignore_idx`就直接不執行，跳下一個
-5. 執行command時，若`op`為`IGNORE`，則把`opOrder`塞給`ignore_idx`(global變數)
+4. If current c`ommand index <= ignore_idx`, skip execution
+5. During execution, if `op` is `IGNORE`, assign `opOrder` to `ignore_idx` (a global variable)
 
-第七題 Implement "+", there is no space between "+" (不小心拍到的)
+Question 7: Implement "+", no space between "+" (captured by accident)
 ```=bash
 % ls |1+2
 % noop
@@ -194,9 +193,9 @@ test.html
 % number
     1 bin
     2 test.html
-% # 剩下的沒拍到
+% # rest not captured
 ```
-就 在 填info.opOrder的時候，處理一下token讓他可以接"+"就好
+... just ... handle token parsing in `info.opOrder` to support `+`
 ```=cpp
 size_t prev_start = 1;
 for (size_t i = 1; i < token.size(); ++i) {
@@ -210,16 +209,16 @@ if (token.size() != 1) {
 }
 ```
 
-
 ## Body (remain.cpp)
 :::danger
-以每個command的輸出創造pipe
+Create a pipe for each command’s output
 :::
-當有多個command輸入到同一command會覆蓋
+When multiple commands input to the same command, it will overwrite
+
 :::warning
-用merge pipe合併
+Use merge pipe to combine
 :::
-在小量輸出可以運作，遇到大量輸出如`manyblessings`會把buf塞爆
+Works with small outputs, but large outputs like `manyblessings` will overflow the buffer
 ```=cpp
 int mergePipe[2], buf[4096];
 pipe(mergePipe);
