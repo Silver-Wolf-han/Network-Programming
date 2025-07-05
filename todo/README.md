@@ -33,12 +33,12 @@ pid_t pid;
     -2: User i block User j，transmission not allowed
     -3: Temporary state, User i just sent to User j, User j must `open()` and read immediately or User i will be blocked
     **Possible overflow risk: Sending and opening are stored in the same place. What happens if a very large file is sent?**
-    :::danger
-    From project2 demo
-    The issue not mention above, is just be blocked. For example, `manyblessings A >2` is an END_COMMAND, but it's meant to be sent to others and must not be blocked, so add a condition: if there's to_user_pipe, do not wait.
-
-    Still has other issues... like resource errors... just ignore it, let it die.
-    :::
+    > ❗ **Danger:**
+    > 
+    > From project2 demo
+    > The issue not mention above, is just be blocked. For example, `manyblessings A >2` is an END_COMMAND, but it's meant to be sent to others and must not be blocked, so add a condition: if there's to_user_pipe, do not wait.
+    >
+    > Still has other issues... like resource errors... just ignore it, let it die.
 
 5. `size_t user_idx_glob`
     Keeps track of the process owner. Why? Because you only know the user when the signal is received.
