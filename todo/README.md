@@ -11,9 +11,10 @@ struct pipeStruct {
     int startCommandType;
 }
 ```
-:::info
-Create a pipe for each command’s input
-:::
+> 💡 **Info:**
+> 
+> Create a pipe for each command’s input
+
 Record the status of each pipe
 1. `OutCommandIndex`: Records which command this pipe outputs to
 2. `fd[2]`: Stores the pipe
@@ -178,10 +179,10 @@ test.html
 1. Add `IGNORE:5` to `op` options
 2. On reading `%`, `info.op=IGNORE`, `info.opOrder=` number after `%`
 3. `pipeMap` must be pushed with `IGNORE` (handled with multi-line pipe fix) ~~and I forgot it in demo~~
-   :::warning
-   At `ignore_idx++`, **when condition is met, i.e., during ignore period**, move ignore count forward as well. since `command A | command B` counts as 1 command)
-   Single line doesn’t need this fix because `command %N` outputs directly and doesn’t connect to pipe.
-   :::
+   > ⚠️ **Warning:**
+   > 
+   > At `ignore_idx++`, **when condition is met, i.e., during ignore period**, move ignore count forward as well. since `command A | command B` counts as 1 command)
+   > Single line doesn’t need this fix because `command %N` outputs directly and doesn’t connect to pipe.
 4. If current c`ommand index <= ignore_idx`, skip execution
 5. During execution, if `op` is `IGNORE`, assign `opOrder` to `ignore_idx` (a global variable)
 
@@ -210,14 +211,14 @@ if (token.size() != 1) {
 ```
 
 ## Body (remain.cpp)
-:::danger
-Create a pipe for each command’s output
-:::
+> ❗ **Danger:**
+> 
+> Create a pipe for each command’s output
 When multiple commands input to the same command, it will overwrite
 
-:::warning
-Use merge pipe to combine
-:::
+> ⚠️ **Warning:**
+> 
+> Use merge pipe to combine
 Works with small outputs, but large outputs like `manyblessings` will overflow the buffer
 ```=cpp
 int mergePipe[2], buf[4096];
