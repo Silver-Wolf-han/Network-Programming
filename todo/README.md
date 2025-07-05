@@ -183,16 +183,16 @@ Same as `http_server`, responsible for handling `accept` and creating `class ses
 
 #### class session
 The parsing ~~string processing~~ part is the same as in `http_server`  
-:::info
-Differences in flow:  
-Windows:
-1. When receiving `/panel.cgi`, directly print out the full HTML; no need to fork -> exec  
-2. After setting the environment, start a `thread` to execute `console(socket, environment)`, and the original recursion continues `do_read()`
-Linux:
-1. fork()
-2. dup()
-3. exe()
-:::
+> 💡 **Info:**
+> 
+> Differences in flow:  
+> Windows:
+> 1. When receiving `/panel.cgi`, directly print out the full HTML; no need to fork -> exec  
+> 2. After setting the environment, start a `thread` to execute `console(socket, environment)`, and the original recursion continues `do_read()`
+> Linux:
+> 1. fork()
+> 2. dup()
+> 3. exe()
 
 #### console
 `void console(tcp::socket &socket_, map<string, string> &env);`
