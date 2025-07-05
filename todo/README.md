@@ -4,20 +4,20 @@
 
 ### http_server.cpp
 `[Usage]: ./http_server [port]`
-(根據Spec) 這裡要做的事情是
-1. 處理 HTTP 的 URL (e.g., `http://127.0.0.1:7001/panel.cgi`)
-2. 把 URL 裡面的 `something.cgi` 叫起來執行
-3. 根據 URL 把環境變數弄好
-4. 用 `<boost/asio.hpp>` 完成
+(According to Spec) What needs to be done here is
+1. Handle the HTTP URL (e.g., `http://127.0.0.1:7001/panel.cgi`)
+2. Call and execute the `something.cgi` in the URL
+3. Set up environment variables according to the URL
+4. Implement using `<boost/asio.hpp>`
 
 #### main
-(照搬`extra_files/echo_server.cpp`裡面的`main`，沒有變)
-就把`class server`叫起來而已
+(Copied directly from `extra_files/echo_server.cpp`'s `main`, no changes)
+Just instantiates `class server`
 
 #### class server
-(照搬`extra_files/echo_server.cpp`裡面的`server`，沒有變)
-就負責accept東西而已，`constructor`也只有call `do_accept()`
-然後`do_accept()`接收到東西後也就開一個`class session`出來處理，接著recursion繼續accept
+(Copied directly from `extra_files/echo_server.cpp`'s `server`, no changes)
+Just responsible for accepting connections. The `constructor` only calls `do_accept()`
+Then, after `do_accept()` receives a connection, it spawns a `class session` to handle it, and continues accepting recursively
 [Boost async_accept](https://beta.boost.org/doc/libs/1_67_0/doc/html/boost_asio/reference/basic_socket_acceptor/async_accept/overload6.html)
 ```=cpp
 void do_accept() {
@@ -32,23 +32,23 @@ void do_accept() {
 }
 tcp::acceptor acceptor_;
 ```
-這面這段function的順序是
-1. 進入 `void do_accept()` 
-2. 進入 `acceptor_.aync_accept()` 吃 1 個 argument
-    2-1. 一個 lambda function `[this](boost::system::error ec, tcp::socket socket)` (Document叫這個handler)
-3. **先處理完`aync_accept()`之後，接著進 lambda function**
-4. lambda function 會把創一個 `class session` 繼續處理
+The function flow is:
+1. Enter `void do_accept()`
+2. Enter `acceptor_.async_accept()` with 1 argument
+    2-1.  A lambda function  `[this](boost::system::error ec, tcp::socket socket)` (called "handler" in the docs)
+3. **After `async_accept()` finishes, the lambda function is called**
+4. The lambda creates a `class session` to handle the request
 
-那 `make_shared<session>(move(socket))->start();` 是什麼?
-關於 `make_shared` [StackOverfolw](https://stackoverflow.com/questions/50312423/boostmake-shared-fail-but-stdmake-shared-work), [Boost](https://www.boost.org/doc/libs/1_44_0/libs/smart_ptr/make_shared.html) 反正我要很粗暴的理解為就是一個 shared pointer 啦
+What is `make_shared<session>(move(socket))->start();`?
+About `make_shared` [StackOverfolw](https://stackoverflow.com/questions/50312423/boostmake-shared-fail-but-stdmake-shared-work), [Boost](https://www.boost.org/doc/libs/1_44_0/libs/smart_ptr/make_shared.html) 反正我要很粗暴的理解為就是一個 shared pointer 啦
 
 #### class session
-(架構也是從`extra_file/echo_server.cpp`搬過來的，主要增加`do_read()`裡面的事情，然後沒有`do_write()`，因為要直接執行`some.cgi`)
-繼續把 spec 要求處理完的部分
+(The structure is also copied from `extra_file/echo_server.cpp`, mainly adding logic inside `do_read()`, and there's no `do_write()`, because we directly execute `some.cgi`)
+This part finishes the remaining spec requirements
 ```=cpp
 class session: public enable_shared_from_this<session> {};
 ```
-(不管就粗暴解釋為跟上面的`make_shared`是一組的)
+(Let's crudely interpret this as matching with `make_shared` above)
 ```=cpp
 void do_read() {
     auto self(shared_from_this());
@@ -56,47 +56,47 @@ void do_read() {
         boost::asio::buffer(date_, max_length), [this, self](boost::system::error_code ec, size_t length) {
             if (!ec) {
                 fork()
-                child_1: 填好environment
-                    // 講好一點 parsing, 講難聽一點字串處理
-                child_2: dup 給 client
+                child_1: fill environment
+                    // politely called "parsing", bluntly "string processing"
+                child_2: dup to client
                 child_3: exec `cgi`
-                    3-1. 輸出 http protocal (結尾"\r\n") 過去
-                    3-2. 執行 
-                parent: 把 socket_ 關掉 ， 讓 child 連著就好
+                    3-1. Output http protocol (ending in "\r\n")
+                    3-2. Execute
+                parent: close `socket_`, leave it to the child
             }
         }
     );
 }
 ```
-1. ~~字串處理~~Parsing就照Spec上要求拆開
-2. `dup(socket_.native_handle(), FD)`恩對[Boost](https://live.boost.org/doc/libs/1_87_0/doc/html/boost_asio/reference/basic_stream_socket/native_handle.html)
+1. ~~String processing~~ Parsing according to spec
+2. `dup(socket_.native_handle(), FD)`yep, see [Boost](https://live.boost.org/doc/libs/1_87_0/doc/html/boost_asio/reference/basic_stream_socket/native_handle.html)
 3. `exec .cgi`
-    3-1. 把URL抓出來，如果沒有`.cgi`就丟`"HTTP/1.1 403 Forbiden\r\n"`回去
-    3-2. 有`.cgi` 就丟`"HTTP/1.1 200 OK\r\nServer: http_server\r\n"`
-    3-3. 執行`.cgi` (`panel.cgi`TA給的, `console.cgi`下面產生的，理論上`panel.cgi` run按下去後URL會轉成`console.cgi`的)
+    3-1. Extract URL; if no `.cgi`, send `"HTTP/1.1 403 Forbiden\r\n"` back
+    3-2. If `.cgi` present, send `"HTTP/1.1 200 OK\r\nServer: http_server\r\n"`
+    3-3. Execute `.cgi` (`panel.cgi` is given by TA, `console.cgi` is created below; theoretically, after clicking run on `panel.cgi`, the URL changes to `console.cgi`)
     
 Boost Function Note:
 1. `socket_.async_read_some()` [Boost](https://live.boost.org/doc/libs/1_69_0/doc/html/boost_asio/reference/basic_stream_socket/async_read_some.html)
-    吃兩個東西，buffer和handler，下面有example說single buffer可以用`boost::asio::buffer(data, size)`
-    這個function不一定會全部吃完buffer，想要保證全部吃完就用`async_read()` ~~目前沒有遇到問題~~
+    akes two arguments: buffer and handler. The example shows you can use `boost::asio::buffer(data, size)`
+    This function doesn't guarantee reading the full buffer; use `async_read()` if you want that ~~No problems encountered for now~~
 2. `boost::asio::buffer(date_, max_length)` [Boost](https://live.boost.org/doc/libs/1_69_0/doc/html/boost_asio/reference/buffer.html)
-    直接參考`async_read_some()`裡面的好了
+    Just refer to the example in `async_read_some()`
 
 ### console.cpp
-沒有`[Usege]` 因為這是`panel.cgi`會透過`http_server`叫起來的東西
+No `[Usage]` because this is called by `http_server` through `panel.cgi`
 
 #### main
-會進到這個地方，表示要顯示`console.cgi`了(也就是表格填完要看執行結果了)
-1. 先把環境變數撈出來(`http_server`會設定好)
-2. 把環境變數`"QUERY_STRING"`拿出來依照spec做parsing~~字串處理~~，把每個 UserInfo 給塞好
-3. 把 `sample_console.cgi` 的東西拿出來輸出
-4. 叫出`make_shared<Client>(io_context, user.first)->start();` 開始跑連線的部分
+Entering this part means it's time to display `console.cgi` (i.e., the form has been filled and now we want to see the execution result)
+1. First, retrieve the environment variables (they are set by `http_server`)
+2. Extract the environment variable `"QUERY_STRING"`, and do parsing according to the spec ~~string processing~~, and fill each `UserInfo` accordingly
+3. Output the contents of `sample_console.cgi`
+4. Call `make_shared<Client>(io_context, user.first)->start();` to start the connection process
 
 #### class Client
 ```=cpp
 class Client : public enable_shared_from_this<Client> {}
 ```
-1. `do_resolve()` : 把 domain name 轉成 IP [Boost](https://live.boost.org/doc/libs/1_37_0/doc/html/boost_asio/reference/ip__basic_resolver/async_resolve/overload1.html)
+1. `do_resolve()` : Convert domain name to IP [Boost](https://live.boost.org/doc/libs/1_37_0/doc/html/boost_asio/reference/ip__basic_resolver/async_resolve/overload1.html)
     ```=cpp
     void do_resolve() {
         resolver_.async_resolve(
@@ -112,7 +112,7 @@ class Client : public enable_shared_from_this<Client> {}
         );
     }
     ```
-2. `do_connect()` : 依照 IP 連線 [Boost](https://www.boost.org/doc/libs/1_88_0/doc/html/boost_asio/reference/async_connect.html)
+2. `do_connect()` : Connect using the IP address [Boost](https://www.boost.org/doc/libs/1_88_0/doc/html/boost_asio/reference/async_connect.html)
     ```
     void do_connect() {
         auto self(shared_from_this());
@@ -133,8 +133,8 @@ class Client : public enable_shared_from_this<Client> {}
     }
     ```
 3. `do_read()`, `do_write()`
-    3-1. 輸出有 `"% "` 要收command -> `do_write()`
-    3-2. 輸出沒有 `"% "` 要收結果 -> `do_read()`
+    3-1. Ouptut contain `"% "`, need to receive command -> `do_write()`
+    3-2. Output do not contain `"% "`, need to receive exe result -> `do_read()`
     ```=cpp
     void do_read() {
         auto self(shared_from_this());
@@ -170,24 +170,24 @@ class Client : public enable_shared_from_this<Client> {}
     }
     ```
     [Boost](https://live.boost.org/doc/libs/1_55_0/doc/html/boost_asio/reference/async_write/overload1.html)
-    跟`async_read_some()`對稱的東西
+    The counterpart of `async_read_some()`
 
 ## Part 2 Windows Version
-(Spec) 把`http_server` 和 `console.cgi` 融在一起然後丟到 Windows10/11
+(Spec) Merge `http_server` and `console.cgi`, then run it on Windows 10/11
 
 #### main
-跟`http_server`是一樣的
+Same as `http_server`
 
 #### class server
-跟`http_server`是一樣的，負責接`accept`然後開`class session`
+Same as `http_server`, responsible for handling `accept` and creating `class session`
 
 #### class session
-parsing~~字串處理~~的部分和`http_server`是一樣的
+The parsing ~~string processing~~ part is the same as in `http_server`  
 :::info
-流程不一樣的地方
+Differences in flow:  
 Windows:
-1. 原本收到`/panel.cgi`直接把html整個印出來，不用去fork -> exe
-2. 接好environment之後，開一個`thread`去執行`console(socket, environment)`，，原本的recursion繼續`do_read()`
+1. When receiving `/panel.cgi`, directly print out the full HTML; no need to fork -> exec  
+2. After setting the environment, start a `thread` to execute `console(socket, environment)`, and the original recursion continues `do_read()`
 Linux:
 1. fork()
 2. dup()
@@ -196,29 +196,31 @@ Linux:
 
 #### console
 `void console(tcp::socket &socket_, map<string, string> &env);`
-和 Part 1 `console.cpp`裡面的 `main()` 做一樣的事情 (字串處理，把console.cgi印好)
-**不是印好，現在不是用cout了**，用下面的function把要輸出的內容寫出去，因為現在是在同一支程式，沒辦法用dup之後輸出。
+Does the same thing as `main()` in Part 1’s `console.cpp` (string processing, printing `console.cgi`)  
+**It doesn’t print using cout anymore**, now use the following function to write the output content,  
+because this is all in one program and we can’t use dup to redirect output.
 ```
 boost::asio::write(socket_, boost::assio::buffer(data))
 ```
 
 #### class Client
-和`console.cpp` 大致一樣， 最大差別就是輸出一樣不是用cout了
+Similar to `console.cpp`, The biggest difference is that output is no longer using cout
 
-## 問答
-恩對阿 問答12%三題 然後有一題答不出來..
-1. 問我`http_server`裡面`main`有一個`boost::asio::io_context io_context`是幹什麼用的..?
-    (~~幹這從`echo_server`裡面貼過來的誰知道是什麼~~)就是處理跟OS互動用的東西啦，怎麼可能整個網路沒有用到OS，阿全部丟給這個處理?
+## Q&A
+Yeah, Q&A was 12%, 3 questions, and I couldn’t answer one...
+1. They asked what the `boost::asio::io_context io_context` in the `main` of `http_server` is used for..?
+    (~~Damn, I copied that from `echo_server`, how would I know what it does~~) It’s for handling interaction with the OS. There’s no way a networking app doesn’t interact with the OS, right? So we just pass everything to this to handle.
 
-2. 問我boost::..什麼function後面的`handler`是什麼時候執行 (~~其實我不知道他在問什麼~~)
-    反正我就說 就call他的function跑完之後會來執行阿 (但助教好像不滿意) 我就說 阿會有error_code (助教好像聽到這個詞就滿意了?)
+2. They asked when the `handler` of some boost::... function is executed (~~Honestly I didn’t really understand the question~~)
+    So I just said: It gets executed after the function it’s passed to finishes running. (But the TA didn’t seem satisfied...) So I added: It will return an `error_code` (TA seemed pleased once I said that keyword?)
 
-3. 問我怎麼把Host Name轉IP?
-    就asyc_resolve，裡面幹嘛的 就 DNS (Domain Name System)
+3. They asked how to convert a Host Name to an IP?
+    Just use `async_resolve`, and what it does is... DNS (Domain Name System)
 
 ## Demo
-(從網路上查到的題目:用`async_wait`來讓command都延遲一秒傳送，靠GPT才寫出來，查API根本看不懂)
-第三題 Delayed Command (CGI)
+(Problem I found on other note in github: use `async_wait` to delay each command by one second. Only managed to write this thanks to GPT, couldn’t understand the API docs at all)
+
+Third Problem: Delayed Command (CGI)
 ```=cpp
 if (output_msg.find("% ") == string::npos) {
     do_read();
@@ -235,19 +237,22 @@ if (output_msg.find("% ") == string::npos) {
 }
 ```
 
-應該是第四題
-(從吳信葆學長貼到的:如果`boost::system::error_code& ec`可能有錯的情況)
-呃 應該 就 輸出他要的格式? 我也不知道題目是什麼?
+### Probably the Fourth Question  
+(From what senior ~~Wu Xin-Bao~~ posted: when `boost::system::error_code& ec` might indicate an error)  
+Uhh... I guess just output the required format? I don’t even know what the question was?
 
 
-(偷看到前面的題目:如果REQUEST不是`panel.cgi`的話就回傳403)
-第一題
-只接受`/panel.cgi`的request，其他request則回傳`HTTP1.1 403 Forbidden`
-我參考的考古是這樣(欸是說這樣會讓第二部分轉`console.cgi`爆開吧 害我以為考古有問題)
-在`http_server.cpp`裡面`exec`的步驟，多判斷一個REQUEST_URI裡面沒有`console.cgi`就輸出(STDOUT) `HTTP/1.1 403 Forbiden\r\n` 回去
+### First Question
+(Sneak peek at a previous question: if the REQUEST is not `panel.cgi`, return 403)
+Only accept requests for `/panel.cgi`; for other requests, return `HTTP1.1 403 Forbidden`  
+I referred to a previous code that did it like this  
+(though this would break the second part when switching to `console.cgi`, made me think the old question was wrong)  
+In the `exec` step of `http_server.cpp`,  
+add a check: if `REQUEST_URI` doesn’t contain `console.cgi`, then output (to STDOUT) `HTTP/1.1 403 Forbidden\r\n` back
 
-我抽到的:
-第二題
-console.cgi的每一個seesion在收到第一個shell prompt(%)後，自動送出who指令到網頁和np_single_golden
-`console.cpp`裡面`class Client`裡面多加一個`bool isFirst(true)`
-接著在`do_write()`裡面，如果是第一次就直接把`input_cmd`改成`who\n`(要加`\n`)然後把`isFirst`改成`false`
+### Second Question
+This is the one I drew:
+For each session in `console.cgi`, after receiving the first shell prompt (`%`), automatically send the `who` command to both the web page and `np_single_golden`  
+How to do?
+In `console.cpp`, inside `class Client`, add a `bool isFirst(true)`  
+Then inside `do_write()`, if it’s the first time, directly change `input_cmd` to `who\n` (make sure to include `\n`), and set `isFirst` to `false`
