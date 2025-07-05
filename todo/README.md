@@ -82,9 +82,9 @@ return type    : void
 ```
 Same as Project 1, except adds some NULLs argus for Part 2 shared functions
 
-:::info
-So when Part 2 references Project 1, it focuses on why additional functions were needed
-:::
+> 💡 **Info:**
+> 
+> So when Part 2 references Project 1, it focuses on why additional functions were needed
 
 # Part 2
 
@@ -174,9 +174,9 @@ Stores state of each logged-in user
 ### User Pipe handler
 global variable `map<pair<int,int>, pipeStruct> UserPipes`
 1. Key: `UserPipes.first` is a `pair<int,int>`，indicating this pipe is from which User ID(`UserPipes.first.first`) to Which User ID(`User.first.second`) 
-   :::warning
-   -1 means user doesn't exist. Pipe still created and redirected to/from `/dev/null`
-   :::
+   > ⚠️ **Warning:**
+   > 
+   > -1 means user doesn't exist. Pipe still created and redirected to/from `/dev/null`
 2. Value: `PipeStruct`, stores pipe info
 
 ### npshell_handle_one_line
